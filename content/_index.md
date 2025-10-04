@@ -1,7 +1,7 @@
 ---
 title: BarrCodes
 description: My programming blog to post about my random code and small projects.
-summary: My programming blog to post about my random code and small projects.
+summary: This is my programming blog to post about my random code and small projects.
 sitemap:
   changeFreq: daily
   priority: 1

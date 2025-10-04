@@ -7,11 +7,11 @@ description: A simple introduction challange.
 summary: |
   Another year, another set of challanges from [Advent of Code](https://adventofcode.com/), and once again I will attempt to solve them all using Rust.  
   But this year, I will attempt to document my solutions on this blog.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day1.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day1.rs
 ---
 
 ## Part 1
-This year I decided to use `cargo-aoc` instead of the messy self-made repository I used [last year](https://github.com/CattoFace/AdventOfCode23), it is a lot nicer to use and I will explain how I use it when relevant.
+This year I decided to use `cargo-aoc` instead of the messy self-made repository I used [last year](https://github.com/barr-israel/AdventOfCode23), it is a lot nicer to use and I will explain how I use it when relevant.
 The first step is to set my Advent of Code credentials using `cargo aoc credentials <token>`, add a couple macros to `lib.rs` and `day1.rs` and then I'm set to start coding.  
 As usual, the first few days should pose no significant challenge.
 
@@ -193,7 +193,7 @@ In addition to parsing the integer, it also advances the slice by 1 byte for eve
 I will probably use this function a lot during the month so I'm putting it in a `util.rs` file.
 
 > [!WARNING]
-> This function can easily break in other scenarios, for example, given too many digits for the requested output type, or given UTF-8 strings, or some other unexpected type that implements close Mul and Add. It's only purpose is to parse unsigned integers fast.
+> This function can easily break in other scenarios, for example, given too many digits for the requested output type, or given UTF-8 strings, or some other unexpected type that implements close Mul and Add. Its only purpose is to parse unsigned integers fast.
 Running this optimized version nets a significant improvement:
 
 And the new times are:

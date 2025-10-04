@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: This year's "Should have solved part 1 efficiently".
 summary: |
   Part 1 starts of with a simple problem to solve naively, part 2 makes the solution unfeasible.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day11.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day11.rs
 ---
 There are "physics-defying stones" arranged in a straight line, each engraved with a number, with each blink, each stone will be replaced based on the rules:
 

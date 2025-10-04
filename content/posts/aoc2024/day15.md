@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Is this Sokoban?
 summary: |
   A warehouse robot has gone crazy and is moving and pushing boxes at random, the goal is to track the boxes.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day15.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day15.rs
 ---
 ## Input
 The input is a map of the warehouse, that contains walls(`#`), boxes(`O`) and a robot(`@`).  
@@ -53,7 +53,7 @@ In this case, after all the movement, the map will look like this:
 ```
 
 ## Part 1
-The output needs to be the sum of the value for each box after the robot finishes all of it's movements, calculated as it's distance from the top edge times 100 plus it's distance from the left edge.  
+The output needs to be the sum of the value for each box after the robot finishes all of its movements, calculated as it's distance from the top edge times 100 plus it's distance from the left edge.  
 Since calculating that sum is the easy part, I'll start with it:
 ```rust
 fn calc_score(map: &[u8]) -> usize {
@@ -162,7 +162,7 @@ The solution I came up with is to first check both sides without moving anything
 It may sound simple but that are a lot of little details to it:  
 
 - If a box is pushed by one side's push function, the other side's push function will already see it in the new position, and might behave unexpectedly.
-- Pushing one side of a box requires pushing it's other side, so a case like my example increases the area that needs to be checked and pushed.
+- Pushing one side of a box requires pushing its other side, so a case like my example increases the area that needs to be checked and pushed.
 - Avoiding mistakes when one side of a box is blocked and the other isn't.  
 
 The next thing to note is that pushing left and right is actually the same as before, there are simply the symbols `[]` instead of the single symbol `O`, but after adjusting for that, they can be pushed as if they were 2 1x1 boxes.  
@@ -287,7 +287,7 @@ fn try_push_robot_wide(to_push: usize, instruction: u8, map: &mut [u8]) -> usize
 }
 ```
 `DWIDTH` is just `WIDTH*2-1` to account for the wider map.  
-The `part2_first` function handles parsing the input into it's wide version, and the continues similarly to part 1.  
+The `part2_first` function handles parsing the input into its wide version, and the continues similarly to part 1.  
 `try_push_robot_wide` calls the matching direction just like in part 1, it even uses the exact same functions for left and right.  
 And for the complex part:
 ```rust

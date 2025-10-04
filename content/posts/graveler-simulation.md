@@ -5,7 +5,7 @@ author: Barr
 keywords: [Rust, CUDA, Pokemon, Random Number Generation]
 description: Answering ShoddyCast's challenge by simulating 1 billion battles in less than a second using Rust, and later, less than 10ms using CUDA.
 summary: In this post I will answer [ShoddyCast](https://www.youtube.com/@ShoddyCast)'s challange and simulate Pokemon battles looking for an extremely rare sequence of results that can save a theoretical game save from a softlock using Rust, and later, also CUDA.
-github: https://github.com/CattoFace/graveler-sim
+github: https://github.com/barr-israel/graveler-sim
 ---
 ## Background
   In Pokemon, it is sometimes possible to "softlock" the game, meaning putting it in a state that is impossible to progress through the main story, but the game is otherwise still functional.  
@@ -29,7 +29,7 @@ Understanding 8 and a half days is not an impressive amount of time, he challeng
 
 ### Ignoring The Real Cartridge
 Before I begin, I want to mention that simply rolling random numbers does not mirror that actual possible results in a real game, that has its own Pseudo-RNG algorithm, which in reality, cannot ever roll a sequence of turns that will save the Graveler.  
-This challenge ignores this behaviour and it's goal is to simply roll a number between 1 and 4, 231 times per battle, for 1 billion battles, and return the biggest amount of lost turns.
+This challenge ignores this behaviour and its goal is to simply roll a number between 1 and 4, 231 times per battle, for 1 billion battles, and return the biggest amount of lost turns.
 
 Now it's time to write some code:
 
@@ -202,12 +202,12 @@ But first..
 ### The Need For More Accuracy
 Since every change so far had a big effect on performance, the setup used until now was sufficient, but when looking for more minor differences there are a few more things that help improve benchmark stability:
 
-- Locking the CPU to it's base clock prevents random clock boosts from affecting the results, this can reduce the deviation of the runs significantly, especially when the boosts cause thermal throttling.
+- Locking the CPU to its base clock prevents random clock boosts from affecting the results, this can reduce the deviation of the runs significantly, especially when the boosts cause thermal throttling.
 - Warmup runs put the CPU in a higher power state(unless locked) and causes the program to be cached, making the first real runs more accurate. In some languages, it also causes code to be JIT compiled during the warmup, making the actual runs only run the optimized version instead of a mix that also includes the compilation time.
 - Running the program more times means more numbers to work with, giving a more accurate average.
 
 In this case I've seen the standard deviation go down from 5-6% to sometimes as low as 0.5~1%.  
-For these reasons, all benchmarks until the final one will use 10 warm-up rounds, 50 real runs, and the CPU will be locked to it's base 2.6GHz.  
+For these reasons, all benchmarks until the final one will use 10 warm-up rounds, 50 real runs, and the CPU will be locked to its base 2.6GHz.  
 For comparison, the last single-threaded version takes **4.6s** under these conditions.
 
 ### The Solution
@@ -346,7 +346,7 @@ I first tried writing `xorshiro256plus` in CUDA and using a state for each threa
 The first step in a kernel is usually self-identification:  
 Each thread has local variables for the block ID within all the blocks running the kernel, the thread ID within all the threads in the same block, and the size of the block.  
 Both of these are 3 dimensional, meaning one can set x,y, and z dimensions. But this is not useful in this case.  
-So I start the kernel by having the thread figure out it's index:
+So I start the kernel by having the thread figure out its index:
 ```c++
 unsigned int index = threadIdx.x + blockIdx.x * blockDim.x;
 ```
@@ -539,5 +539,5 @@ Sometimes the best optimization is just throwing more money at the problem.
 
 ## Summary
 Optimizing code is a lot of fun, and I'm pretty satisfied with the results I achieved and the things I learned.  
-The final version of the solutions is available on my [GitHub](https://github.com/CattoFace/graveler-sim) (the CUDA code is in the cuda directory)
+The final version of the solutions is available on my [GitHub](https://github.com/barr-israel/graveler-sim) (the CUDA code is in the cuda directory)
 

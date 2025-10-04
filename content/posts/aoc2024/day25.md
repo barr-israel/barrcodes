@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: A simple one for the last day.
 summary: |
   The chief historian is nowhere to be found, going back to his office, it appears to be locked, and North Pole Security doesn't know which key is correct.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day25.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day25.rs
 ---
 ## Input
 The input contains schematics of both locks and keys mixed together, locks have the top row filled with `#` and the keys have the bottom row filled with `#`.  

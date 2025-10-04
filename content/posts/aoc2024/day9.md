@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Defragmenting a disk? Finally something that sounds programming related.
 summary: |
   An elf is trying to compact the files on his computer.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day9.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day9.rs
 ---
 ## Input
 The input is a single line consisting of a list of a 1 digit size, alternating between a file and empty space, each file also has an ID, given in increasing order(empty spaces are not given an ID).
@@ -68,7 +68,7 @@ pub fn part1_first(input: &[u8]) -> u64 {
     checksum(&disk)
 }
 ```
-I decided to fully expand the input into the disk size, filling the ID of each file into it's location or `EMPTY_FILE`(`u32::MAX`, since `0` is a valid ID) into empty space.  
+I decided to fully expand the input into the disk size, filling the ID of each file into its location or `EMPTY_FILE`(`u32::MAX`, since `0` is a valid ID) into empty space.  
 The process is fairly simple with this design:
 
 1. Expand input into disk
@@ -159,7 +159,7 @@ pub fn part2_first(input: &[u8]) -> u64 {
     checksum_mini(&mini_disk)
 }
 ```
-The building of the "mini disk" and calculating it's checksum are fairly straight forward.  
+The building of the "mini disk" and calculating its checksum are fairly straight forward.  
 To compact the disk, I go through every file from back to front, and try to find areas from the front that can fit the file, if a place is found, I might only need to take up some of it, so I create a new smaller empty file after the existing empty one, and replace the empty one with the file that I'm moving.  
 If the empty space is exactly the right size, no new empty file is needed.  
 
@@ -361,7 +361,7 @@ Day9 - Part1/no_parse   time:   [72.036 µs 72.106 µs 72.193 µs]
 So I'll stop there.
 
 ## Trusting The Compiler
-Throughout the solutions, I used `(read..read+X as u64).sum::<u64>()` to sum the indices, on it's surface this seems very inefficient, but in reality this operation pretty much always gets optimized to the well known mathematical formula `(first-last+1)(first+last)/2`(for the right side open range).  
+Throughout the solutions, I used `(read..read+X as u64).sum::<u64>()` to sum the indices, on its surface this seems very inefficient, but in reality this operation pretty much always gets optimized to the well known mathematical formula `(first-last+1)(first+last)/2`(for the right side open range).  
 I've implemented the formula myself to compare and could measure no real difference.  
 Unfortunately, at the moment `perf` still refuses to work correctly so I can't inspect the produced assembly instructions.
 

@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Counting antinodes(what even are antinodes?)
 summary: |
   Antennas now make people buy more chocolate, but only in "antinodes", so they need to be found and counted.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day8.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day8.rs
 ---
 
 ## Part 1

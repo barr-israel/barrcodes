@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Every year needs a flood fill day.
 summary: |
   The Elves are trying to build fences for their gardens and need me to calculate the cost.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day12.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day12.rs
 ---
 Today, the Elves are asking for the cost of building fences around their gardens, each type of plant needs a fence separating it from other types, for example, plots arranged like this:
 ```
@@ -32,7 +32,7 @@ Need fences like this:
 +-+-+-+
 ```
 ## Part 1
-The cost of a fence is it's inner area times its perimeter.  
+The cost of a fence is its inner area times its perimeter.  
 This is simple to do with an algorithm called [flood fill](https://en.wikipedia.org/wiki/Flood_fill), which starts from a "seed" location and then finds and marks all other reachable locations.  
 What counts as "reachable" this time is directly touching(no diagonals) tiles that have the same plant type.  
 I've never implemented flood fill before but I'm confident I can do it without even reading the pseudo-code from the link above.  
@@ -117,11 +117,11 @@ fn flood_fill(
 }
 
 ```
-This is a simple algorithm that queues up a seed position to check, and for each position checks, also adds it's direct neighbours if they are of the same type and were not marked yet.  
+This is a simple algorithm that queues up a seed position to check, and for each position checks, also adds its direct neighbours if they are of the same type and were not marked yet.  
 Checking after popping is necessary because the same position could have been added by different sides before it got marked.  
 The perimeter is measured based on these observations:
 
-- Adding a plot with it's own fence adds a perimeter of 4.
+- Adding a plot with its own fence adds a perimeter of 4.
 - Not all sides of that fence are needed, for every neighbour of the same type, both the new plot and the neighbour's plot need to remove the fence between them.
 
 There are better filling algorithms like span fill, but this works.

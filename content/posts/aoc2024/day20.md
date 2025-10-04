@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Yet Another Maze.
 summary: |
   Maze solving has gotten boring even for these robots, so they started cheating.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day20.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day20.rs
 ---
 ## Input
 A simple maze, `.` for paths, `#` for walls, `S` for the start and `E` for the end, for example:

@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Maze solving with a twist - the maze changes over time.
 summary: |
   Today's challange involves reaching the end of a maze, a simple request, until it starts changing in part 2.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day18.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day18.rs
 ---
 ## Input
 Unlike other grid-related days, today's input is a list of `(x,y)` coordinates that get blocked over time, every millisecond(just an irrelevant unit, 1 step), one position on the grid is blocked.  
@@ -57,7 +57,7 @@ pub fn part1_first(mut input: &[u8]) -> u32 {
 }
 ```
 The only thing to note here is that the input has far more than 1024 lines, so I needed to stop reading before the end of the file.  
-Since I won't be optimizing this part further, here is it's runtime:
+Since I won't be optimizing this part further, here is its runtime:
 ```
 Day18 - Part1/(default) time:   [28.585 µs 28.637 µs 28.697 µs]
 ```

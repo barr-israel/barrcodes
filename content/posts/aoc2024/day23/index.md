@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Finding cliques in graphs
 summary: |
   Today's challange is about finding cliques in a graph constructed from a list of edges, that together make up a computer network.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day23.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day23.rs
 ---
 ## Input
 Each line in the input is a single edge between 2 computers, for example:

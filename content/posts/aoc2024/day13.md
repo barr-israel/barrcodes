@@ -6,7 +6,8 @@ keywords: [Advent of Code, Rust]
 description: Math disguised as dynamic programming, you're not getting me this time AoC.
 summary: |
   Today's challange describes a set of claw machines that are controlled by 2 buttons, and the goal is to win as many prizes as possible with as little money as possible.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day13.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day13.rs
+math: true
 ---
 ## Input
 The A and B buttons each move the claw a certain distance in the X and Y direction(each moves in both directions).  

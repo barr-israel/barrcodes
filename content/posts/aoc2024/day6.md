@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Path tracing a very odd guard route.
 summary: |
   Today the goal is tracking a guard that is going on a patrol route and turning right every time he encounters an obstacle, until he is off the grid.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day6.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day6.rs
 ---
 The given input is a map with the location of the guard marked as `^`, obstacles marked as `#` and every other location is open and marked with `.`
 

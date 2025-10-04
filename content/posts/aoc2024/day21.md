@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: A 121-armed match followed by 2 1000 lines long lookup table definitions.
 summary: |
   The goal is simple: input a code into a numpad, using a robot, that is controlled by another robot, that is controlled by another robot...
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day21.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day21.rs
 ---
 ## Input
 5 codes that need to be inputted into a numpad, for example:
@@ -32,7 +32,7 @@ The numpad looks like this:
     | 0 | A |
     +---+---+
 ```
-And the robot starts with it's finger on the `A` button.  
+And the robot starts with its finger on the `A` button.  
 
 Moving the robot is done using another keypad that looks like this:
 ```goat {width=200,height=150}
@@ -48,7 +48,7 @@ Moving the robot is done using another keypad that looks like this:
 ```
 Pressing an arrow key will move the finger in that direction, pressing `A` will make the robot press the key it is currently on.  
 
-That keypad can only be pressed by *another* robot, which, like the first one, starts with it's finger on the `A` button.
+That keypad can only be pressed by *another* robot, which, like the first one, starts with its finger on the `A` button.
 
 That robot is controlled by an identical keypad, which can only be pressed by yet another robot.
 

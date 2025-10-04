@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: A simple recursion problem.
 summary: |
   Today's goal is finding whether(and later, in how many ways) can striped towels be arranged in various patterns.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day19.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day19.rs
 ---
 ## Input
 The input starts with a long line of the available towels, for example:
@@ -142,7 +142,7 @@ fn count_potential_pattern<'a>(
     ans
 }
 ```
-Every place that returned a boolean now returns a count, and instead of `any`, I map from every the pattern to it's count, and then sum the count from all the patterns.
+Every place that returned a boolean now returns a count, and instead of `any`, I map from every the pattern to its count, and then sum the count from all the patterns.
 
 ## Optimizations
 These are the times for the current versions:

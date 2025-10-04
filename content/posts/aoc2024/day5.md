@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Enforcing rules
 summary: |
   Today's challenge involves first parsing a set of rules, and then checking which lines in the rest of the input matches the rules.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day5.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day5.rs
 ---
 Each line in the first part of the input is made out of a pair of 2 digit numbers, for example: `47|53`, which represent a rule.  
 In this example, it means that page 47 must be printed before page 53.  

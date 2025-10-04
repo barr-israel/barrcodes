@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Building a logic circuit
 summary: |
   The elves monitoring device is malfunctioning, and as always, its my job to figure out what went wrong.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day24.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day24.rs
 ---
 ## Input
 The input begins with the state of the x registers and y registers like so:
@@ -83,7 +83,7 @@ Pointers to `Z` are used only as targets.
 
 
 I created a "memory" array for all the intermediary values, these have 3 states: `true`, `false`, and not yet evaluated, which means the gate that writes to them needs to be evaluated.  
-So each line that represent a gate is parsed into it's 4 components, and gets added to the array at the location of the target operand, to be evaluated later.  
+So each line that represent a gate is parsed into its 4 components, and gets added to the array at the location of the target operand, to be evaluated later.  
 It is important to be able to replace the gates in the array with a concrete boolean value because the same value could be read multiple times, and without storing the result, I would need to reevaluate the gate.  
 
 ```rust

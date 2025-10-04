@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: A simple day compared to yesterday's monstrosity - just a little psudo-random number generation.
 summary: |
   Monkeys are buying hiding spots at a psudo-random price, which I need to predict to maximize profit.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day22.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day22.rs
 ---
 ## Input
 Every line contains the first "secret" of each monkey, which is a number(that fits in `u32`).  
@@ -272,6 +272,6 @@ And now it's even faster:
 ```
 Day22 - Part2/table_rayon time:   [13.341 ms 13.383 ms 13.428 ms]
 ```
-Interacting with the atomic values so much probably has a big effect on this result, and it would be faster if each thread had it's own table to sum at the end, but I'm not going to try implementing that today.
+Interacting with the atomic values so much probably has a big effect on this result, and it would be faster if each thread had its own table to sum at the end, but I'm not going to try implementing that today.
 
 Part 2 could also implement SIMD for the pseudo-random algorithm, but the improvement from that will likely disappear within the much longer overall run time.

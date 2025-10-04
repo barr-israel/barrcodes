@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: The first pathfinding day.
 summary: |
   Today's challange is a simple pathfinding one: find trails in increasing heights on a topological map.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day10.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day10.rs
 ---
 ## Input
 The input is a topological map, and trailheads are defined as the starts of trails in the topological map that go from 0-9 in steps of 1, for example, the input:
@@ -125,7 +125,7 @@ memchr::memrchr_iter(b'0', input)
     .map(|start| find_trailhead_score_buffer(input, start, width, height, &mut buffer))
     .sum()
 ```
-Part 2 was updated in the same way, the function now uses buffer instead of creating it's own.  
+Part 2 was updated in the same way, the function now uses buffer instead of creating its own.  
 Clearing the buffer is not necessary as the function always finishes with an empty queue.  
 In the new [flamegraph](flamegraph_after.svg), those times are gone, and the overall performance has improved:
 ```

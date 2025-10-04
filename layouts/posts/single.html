@@ -2,10 +2,12 @@
 {{with .PublishDate}}<div style="text-align: right" class="date"><em>{{. | dateFormat "2006-01-02"}}</em></div>{{end}}
 <p>{{ .Summary  }}</p>
 {{with .Params.github}}<p><a href="{{.}}">Link To The Code On GitHub</a></p>{{end}}
+<h2> Table Of Content</h2>
+{{ .TableOfContents }}
 {{.Content}}
 {{partial "step_nav.html" .}}
 <script src="https://giscus.app/client.js"
-        data-repo="CattoFace/barrcodes"
+        data-repo="barr-israel/barrcodes"
         data-repo-id="R_kgDOMXqdqQ"
         data-category="Announcements"
         data-category-id="DIC_kwDOMXqdqc4CkeUH"

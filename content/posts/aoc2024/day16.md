@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: The first Dijkstra day
 summary: |
   Today's challange is just a maze, but turning has a cost.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day16.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day16.rs
 ---
 ## Input
 A simple maze, start location marked with `S`(always bottom left corner), end location marked with `E`(always top right corner), paths marked with `.` and walls marked with `#`.  The entire maze has walls around it(so no need to check for going out of bounds).  
@@ -185,7 +185,7 @@ Day16 - Part1/opt       time:   [609.06 µs 610.63 µs 612.61 µs]
 ## Part 2
 How many positions are part of an optimal path?  
 This complicates things a fair bit, now I need to check all routes at the minimal cost and not just the first, and I need to track the entire route take.  
-I've initially chosen to implement the most basic solution: a vector attached to each step with it's history.  
+I've initially chosen to implement the most basic solution: a vector attached to each step with its history.  
 These are the important changes:
 ```rust
     let mut available_positions = vec![true; input.len()];
@@ -224,8 +224,8 @@ These are the important changes:
 More specifically:
 
 - Using `StepH` instead of `Step`, the only difference is that `StepH` has a history vector.
-- Instead of returning on the first path to reach the end, it's entire path gets added to a boolean array and a counter, to be returned after the queue is empty.
-- Each time a position is popped from the queue, it is added to it's own history.
+- Instead of returning on the first path to reach the end, its entire path gets added to a boolean array and a counter, to be returned after the queue is empty.
+- Each time a position is popped from the queue, it is added to its own history.
 - Short circuiting when the cost gets above an already found minimum cost.
 - Instead of tracking a boolean `visited` for each position+direction, the minimum cost to get there must be tracked instead, this way if another path reaches the same position+direction with the same cost, it is allowed to continue, instead of being forced to stop there(any higher cost means it is impossible to reach the end with a minimum cost)
 - The history gets **cloned** each time a new step is pushed to the queue.

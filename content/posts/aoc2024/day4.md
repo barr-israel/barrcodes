@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Going 2 dimensional - a word search
 summary: |
   Seems like these challanges mostly don't involve searching for this missing historian(does anyone even notice the lore for these?), today we've got an elf looking for help with her word search.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day4.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day4.rs
 ---
 ## Part 1
 The task for part 1 is simple: given a grid of letters, find all occurrences of `XMAS`, forwards, backwards, up, down, and diagonal.

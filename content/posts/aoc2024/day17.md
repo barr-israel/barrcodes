@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: A simple interpreter, until it isnt.
 summary: |
   Part 1 has a simple program to interpret, part 2 makes it a lot more complex.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day17.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day17.rs
 ---
 ## Input
 The input is a short text giving the starting value of 3 registers, and a set of instructions to execute, for example:
@@ -96,7 +96,7 @@ Unfortunately, today also requires looking directly at the input looking for ass
 - Turns out every input ends with a `jnz A,0` instruction, meaning "repeat the whole program if A is not 0", and no other jumps.  
 - Every iteration read the bottom 3 bits of A, and later shift A right by 3 bits.
 - A few more bits from A will be read, and a few XOR operations will be done that involve that B and C registers(but never A), and at some point there will be a single print from B or C.
-- This means A is never written to, and it's bottom 3 bits are removed at each iteration.  
+- This means A is never written to, and its bottom 3 bits are removed at each iteration.  
 
 Using these assumptions, one can work in reverse, guess random A values for the last iterations and see which ones print the last instruction operand, and then guess random A values and see which ones print the last instruction opcode, and leads to one of the A values that later printed the last operand, and so on.
 
@@ -129,7 +129,7 @@ const TABLE_SIZE: usize = 1<<10;
       })
       .collect();
 ```
-This version of the interpreter already incorporates the assumptions into it's implementation, it doesn't even read the last instruction.  
+This version of the interpreter already incorporates the assumptions into its implementation, it doesn't even read the last instruction.  
 
 Now I can create the set of possible A values that can print the last instruction operand:
 ```rust

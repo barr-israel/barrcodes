@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: Bruteforce math.
 summary: |
   Appearently elephents can still math operators and *I* need to fix it.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day7.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day7.rs
 ---
 
 ## Input

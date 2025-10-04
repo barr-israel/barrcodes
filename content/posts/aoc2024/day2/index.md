@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: A classic "one mistake allowed" challange.
 summary: |
   Second day, this time we've got a classic "one mistake allowed" challange for part 2.
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day2.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day2.rs
 ---
 Part 1 is fairly basic, I'll just get to my naive solution:
 

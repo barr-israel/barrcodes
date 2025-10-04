@@ -6,7 +6,7 @@ keywords: [Advent of Code, Rust]
 description: A relatively simple part 1, an extremely evil part 2.
 summary: |
   Just tracking some robots moving in diagonal lines, how bad could it be?
-github: https://github.com/CattoFace/aoc2024/blob/main/src/day14.rs
+github: https://github.com/barr-israel/aoc2024/blob/main/src/day14.rs
 ---
 ## Input
 Each line in the input represents a robot in a `103x103` grid, it has a starting position in x,y values and velocity per second in x,y values, for example:
@@ -77,12 +77,12 @@ Given that there's that rectangle, it would be easier to detect it.
 I used an extremely basic version of a [Hough Transform](https://en.wikipedia.org/wiki/Hough_transform):  
 As a general explanation, a Hough Transform turns any image to an image of "votes", every pixel in the starting image can add "votes" to any pixel in the output image about where the shape it is searching could be.  
 For axis aligned rectangles, this is very simple: each pixel(that was "detected", in this case, any robot position) votes for the vertical line it is on and the horizontal line it is on.  
-If a rectangle exists, there will be 2 horizontal and 2 vertical lines with a large amount of votes, and they will be it's 4 sides.  
+If a rectangle exists, there will be 2 horizontal and 2 vertical lines with a large amount of votes, and they will be its 4 sides.  
 This approach has some very significant drawbacks with real images but it works here.  
 
 At each step until the rectangle is found:
 1. Counters for every horizontal and vertical lines are initialized to 0.
-2. The position of each robot is calculated, and a "vote" is added to it's horizontal and vertical lines.
+2. The position of each robot is calculated, and a "vote" is added to its horizontal and vertical lines.
 3. if there are 2 horizontal lines with at least 31 votes, and 2 vertical lines with at least 33 votes, return the current step.
 ```rust
 struct Robot {
