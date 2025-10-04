@@ -10,17 +10,21 @@ github: https://github.com/barr-israel/aoc2024/blob/main/src/day13.rs
 math: true
 ---
 ## Input
+
 The A and B buttons each move the claw a certain distance in the X and Y direction(each moves in both directions).  
 Each machine is defined in the following format:
+
 ```
 Button A: X+94, Y+34
 Button B: X+22, Y+67
 Prize: X=8400, Y=5400
 ```
+
 With an empty line between machines.  
 The prize is won if the claw is navigated to the prize coordinates, which is not possible in every machine.
 
 ## Part 1
+
 The goal is to return the minimum cost to win as many prizes as possible, when pressing A costs 3 and pressing B costs 1, there's a hint that buttons should not be pressed more than 100 times.
 
 This may look like a dynamic programming challenge, but in reality, this is just basic math, each machine is a set of 2 equations:
@@ -42,6 +46,7 @@ The infinite case is impossible with $A_x,A_y,B_x,B_y$ all positive(which is the
 So all the talk about a "minimum cost" was just a misdirection to make it seem like a harder problem than it is.  
 
 With a little reordering to reuse the divisor, I converted it to the following `Rust` function:
+
 ```rust
 fn find_cost(a_x: i32, a_y: i32, b_x: i32, b_y: i32, x: i32, y: i32) -> Option<i32> {
     let divisor = a_x * b_y - b_x * a_y;
@@ -57,7 +62,9 @@ fn find_cost(a_x: i32, a_y: i32, b_x: i32, b_y: i32, x: i32, y: i32) -> Option<i
     }
 }
 ```
+
 Now all that's left is to parse the input and sum up the cost from all the solvable machines:
+
 ```rust
 fn process_machine(input: &[u8]) -> (Option<i32>, &[u8]) {
     let a_x = ((input[12] - b'0') * 10 + (input[13] - b'0')) as i32;
@@ -87,16 +94,21 @@ pub fn part1_equation(mut input: &[u8]) -> i32 {
     sum
 }
 ```
+
 I have a suspicion part 2 is going to change some number to be a lot bigger to make a non-math solution unfeasible.
 
 ## Part 2
+
 My suspicion was right, now all the X and Y values needs to be increased by 10,000,000,000,000 after parsing them, the same example input I showed should be parsed as:
+
 ```
 Button A: X+94, Y+34
 Button B: X+22, Y+67
 Prize: X=10000000008400, Y=10000000005400
 ```
+
 Fortunately, I didn't fall for it this time, all I need to do is add this big value to my X and Y values, and change various types to `i64` instead of `i32` to hold the bigger values I'm working with:
+
 ```rust {hl_lines=[1,"14-22",28]}
 fn find_cost64(a_x: i64, a_y: i64, b_x: i64, b_y: i64, x: i64, y: i64) -> Option<i64> {
     let divisor = a_x * b_y - b_x * a_y;
@@ -128,9 +140,11 @@ fn process_machine_far(input: &[u8]) -> (Option<i64>, &[u8]) {
     (find_cost64(a_x, a_y, b_x, b_y, far_x, far_y), next_machine)
 }
 ```
+
 And that's all, the easiest part 2 so far.
 
 ## Performance
+
 There really isn't anything to optimize here, all I'm doing is parsing a couple lines, with 4 out of the 6 numbers at a static location, and doing a little math.  
 According to `perf`, 64% of the time spent in part 2 is on 2 specific `idivq` instructions, these instructions do signed division on 64/128 bit integers, a fairly expensive instruction.  
 Almost all the remaining time is spent parsing.  
@@ -140,6 +154,7 @@ Almost all the remaining time is spent parsing.
 > So the compiler can use a single instruction to get both values when some piece of code contains both `a/b` and `a%b`, so only a single division is done in these cases.
 
 32 bit division is cheaper so despite only changing types, there is a pretty big difference in the performance of the 2 parts:
+
 ```
 Day13 - Part1/equation  time:   [4.9378 µs 4.9709 µs 5.0269 µs]
 Day13 - Part2/equation  time:   [7.2932 µs 7.3537 µs 7.4291 µs]

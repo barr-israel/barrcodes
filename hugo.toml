@@ -18,8 +18,7 @@ baseName = "main-only"
 mediaType = "text/html"
 baseName = "head-only"
 [outputs]
-home = ['html', 'main-only', 'head-only', 'rss']
-section = ['html', 'main-only', 'head-only', 'rss']
-page = ['html', 'main-only', 'head-only']
+home = ['html', 'rss']
+section = ['html', 'rss']
 [sitemap]
 changefreq = "weekly"
