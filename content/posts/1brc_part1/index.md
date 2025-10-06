@@ -2,7 +2,7 @@
 publishDate: 2025-11-01
 title: The One Billion Row Challange Part 1 - Single Threaded Solution From Minutes To Seconds
 author: Barr
-keywords: [Rust, 1BRC, Performance, Optimization, Parallelism]
+keywords: [Rust, 1BRC, Performance, Optimization]
 description: Tackling the well-known "The One Billion Row Challange" in Rust, and optimizing it for maximum performance. Part 1 will only focus on single threaded performance
 summary: |
   ["The One Billion Row Challenge"](https://github.com/gunnarmorling/1brc) is a programming challenge orignally written for Java, where the goal is to summarize a billion rows of temprature measurements as fast as possible. But since its invention, it has been solved in many other languages. In this blog post I will tackle the challenge myself and try to make my solution as fast as possible using Rust using a single thread, and in the next post I will use multiple threads to make it even faster.
@@ -310,9 +310,7 @@ So targeting the measurements vectors was not a great decision, which would have
 The original solution peaks at `4201520 KB`, or about `4 GB`, which fits with the one billion 4 byte floats it needs to store.  
 In comparison, the new version peaks at only `2196 KB`, or about `2 MB`, 2000 times less than the original solution:
 ```bash
-...
-	Maximum resident set size (kbytes): 2196
-...
+Maximum resident set size (kbytes): 2196
 ```
 
 Generating a flamegraph for the new version shows roughly the same breakdown of time as before.
@@ -405,6 +403,7 @@ I also tried splitting the reading of a line into 2: reading up to the `;` and t
 
 My first idea was to eliminate the use of `Vec` as the hash map key by using `[u8;32]` keys, which can fit any of the possible station names:  
 ```rust
+// faster_hash_map.rs
 ...
 let mut summary = HashMap::<[u8; 32], (i32, i32, i32, i32)>::new();
 ...
@@ -866,6 +865,7 @@ diff & mask == mask
 
 So the full function looks like this:
 ```rust
+// simd_eq.rs
 impl StationName {
     #[cfg(target_feature = "avx2")]
     #[target_feature(enable = "avx2")]
@@ -1197,7 +1197,8 @@ While solving this challenge I have attempted some optimizations that did not re
 - I found that 90% of the lines are shorter than 16 bytes, which means I can fit at least 2 lines in a single 32 byte SIMD to potential speed up the line reading.  
   Unfortunately, the more complex flow in `line_read` that included a loop that parses a line for every 1 in the resulting mask caused a slowdown of a few seconds.
 - Creating the different slices from each line generated a bounds check, which I wanted to eliminate, but adding another `assert_unchecked` did not have an effect, and replacing the slice creation with an `unchecked_get` version resulted in a slowdown of a second and a half I could not explain, and it is not worth exploring it just to save 2 instructions that do not take any significant time.
-- At the end I tried using PGO(Profile Guided Optimizations) for a "simple" optimization, but that resulted in a slowdown of around a tenth of a second.
+- I tried using PGO(Profile Guided Optimizations) for a "simple" optimization, but that resulted in a slowdown of around a tenth of a second.
+- I was not satisfied with the performance of `parse_measurement`, and thought I could beat the compiler with hand written inline assembly, but the result was tens of milliseconds behind the compiler's version.
 
 ## Summary And Final Single Threaded Results
 
