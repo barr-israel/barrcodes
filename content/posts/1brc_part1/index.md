@@ -3,7 +3,7 @@ publishDate: 2025-11-01
 title: The One Billion Row Challange Part 1 - Single Threaded Solution From Minutes To Seconds
 author: Barr
 keywords: [Rust, 1BRC, Performance, Optimization]
-description: Tackling the well-known "The One Billion Row Challange" in Rust, and optimizing it for maximum performance. Part 1 will only focus on single threaded performance
+description: Tackling the "The One Billion Row Challange" in Rust, and optimizing it for maximum performance. Part 1 will only focus on single threaded performance
 summary: |
   ["The One Billion Row Challenge"](https://github.com/gunnarmorling/1brc) is a programming challenge orignally written for Java, where the goal is to summarize a billion rows of temprature measurements as fast as possible. But since its invention, it has been solved in many other languages. In this blog post I will tackle the challenge myself and try to make my solution as fast as possible using Rust using a single thread, and in the next post I will use multiple threads to make it even faster.
 github: https://github.com/barr-israel/1brc
@@ -901,7 +901,7 @@ Time (mean ± σ):     11.337 s ±  0.005 s    [User: 10.899 s, System: 0.410 s]
 Range (min … max):   11.330 s … 11.343 s    10 runs
 ```
 
-## Branch-Less Measurement Parsing - 8.54 seconds
+## Branch-Less Measurement Parsing - 8.38 seconds
 
 At this stage I wanted to check how much of the time the program waits for data to come from memory using `perf stat -M TopDownL2`, and instead of a very high `tma_memory_bound` which indicates that, I saw:
 ```
@@ -1060,10 +1060,10 @@ The 3 main changes here are:
 - Utilizing the fact that the last and third to last are always the tenths and the ones digits respectively.
 - Mathematically rearranging the `0` subtraction to occur in one instruction.
 
-> [!Note] Why `assert_unchecked`? And why twice?
+> [!Note] Why `assert_unchecked`?
 > Unless the Rust compiler can guarantee a given index is within a slice, it will always emit a bounds checking comparison.  
 > This comparison will jump to some panicking code if it fails.  
-> But a correct program will never fail, we just need to give the compiler a few hints.  
+> But a correct program will never fail the bounds check, we just need to give the compiler a few hints.  
 > We know that any measurement has at least 3 bytes in the slice, so we can tell that to the compiler using `unsafe { assert_unchecked(text.len() >= 3) };
 `.  
 > After the negative number check, if the number *is* negative, it was actually at least 4 bytes long to begin with, so it is now at least 3 byte long, and otherwise, it did not change so it is still at least 3 bytes.  
@@ -1072,8 +1072,7 @@ The 3 main changes here are:
 > Replacing all indexing in the function with `unchecked_get` would have achieved a similar result but less cleanly.  
 > I have also tried incorporating the "at least 4 if negative" property within the first `assert_unchecked` using `assert_unchecked(text.len() >= (3 + (text[0] == b'-') as usize));
 `, but it did not have the desired effect.
-  Time (mean ± σ):      8.540 s ±  0.018 s    [User: 7.990 s, System: 0.403 s]
-  Range (min … max):    8.495 s …  8.581 s    50 runs
+
 The generated assembly does not contain the offending branches anymore, and it contains many `cmov` instructions:
 
 ```asm
@@ -1117,13 +1116,13 @@ Now `perf stat` reports that `tma_branch_mispredicts` is down to 12.9% and the m
 But more importantly, the new run time of the program is faster, taking **8.54 seconds**.
 
 ```bash
-Time (mean ± σ):      8.540 s ±  0.018 s    [User: 7.990 s, System: 0.403 s]
-Range (min … max):    8.495 s …  8.581 s    50 runs
+Time (mean ± σ):      8.383 s ±  0.007 s    [User: 7.970 s, System: 0.391 s]
+Range (min … max):    8.374 s …  8.394 s    10 runs
 ```
 This time I ran `hyperfine` with 1 warm-up run and 50 measurement runs to get it accurate enough to compare with the next benchmark.
 
 
-## Faster Min/Max: Replacing Branch-less With Branching - 8.37 seconds
+## Faster Min/Max: Replacing Branch-less With Branching - 8.21 seconds
 
 In contrast to what we just did in the measurement parsing, the minimum and maximum functions used to keep the lower and highest measurement per station already use the branch-less `cmovl`(move if less) and `cmovg`(move if greater) instruction, and they take 7% of the runtime of the entire program:
 ```asm
@@ -1158,18 +1157,156 @@ Causes the conditional moves to be replaced with branches and improves the run t
 It gets harder to measure such small differences, but the increased amount of runs allows us to maintain statistical certainty that this version is faster(can be seen from the previous result being outside the deviation and range of the new result).
 
 ```bash
-Time (mean ± σ):      8.369 s ±  0.009 s    [User: 7.824 s, System: 0.405 s]
-Range (min … max):    8.350 s …  8.389 s    50 runs
+Time (mean ± σ):      8.215 s ±  0.009 s    [User: 7.804 s, System: 0.390 s]
+Range (min … max):    8.203 s …  8.236 s    10 runs
 ```
 
-## New Allocator - 8.33 seconds
+## New Allocator - 8.17 seconds
 
 This section is for smaller, unconnected changes that helped push the solution a little bit more.
 
 Replacing the global allocator with `jemalloc` makes the code very slightly faster:
 ```bash
-Time (mean ± σ):      8.332 s ±  0.007 s    [User: 7.781 s, System: 0.411 s]
-Range (min … max):    8.317 s …  8.359 s    50 runs
+Time (mean ± σ):      8.165 s ±  0.007 s    [User: 7.743 s, System: 0.402 s]
+Range (min … max):    8.151 s …  8.176 s    10 runs
+```
+
+## Rewriting The Measurement Parsed Again - 8.02 seconds
+
+I was still unsatisfied with the performance of `parse_measurement`, so I tried implementing it using a different approach: a lookup table.
+
+### Lookup Tables
+
+Lookup tables are used to pre-compute answers ahead of time and store the in an easily accessible form.  
+For example, if we had some particularly expensive function `expensive(num:u16)` that we call often, the simple solution would simply call it every time:
+
+```rust
+fn calc_thing(item: Item) -> u64{
+  expensive(item.group_id)
+}
+```
+
+But if we know that the input to `expensive` is relatively limited, we can pre-compute every possible result:
+```rust
+fn calc_thing(item: Item) -> u64{
+  static lookup_table: [u64;u16::MAX as usize] = {
+    let mut lookup_table = [0u64;u16::MAX as usize];
+    let mut i = 0usize;
+    while i < u16::MAX as usize{
+      lookup_table[i] = expensive(i);
+      i+=1;
+    }
+  }
+  lookup_table[item.group_id as usize]
+}
+```
+
+Notice that `lookup_table` is a static, which means it is computed at compile time and stored in some global location in the binary.  
+So when `calc_thing` is called, the only thing it is doing is read a value from `lookup_table` and return it.
+
+### Parsing With A Lookup Table
+
+Unfortunately, we can't just take the 5 relevant bytes from the slice that contains the number and index into an array, since the table for that would be a terabyte in size.  
+Fortunately, not all bits in those 5 bytes matter to us, and we can also deduce whether the number is positive or negative and then only parse positive numbers based on the remaining 4 bytes.  
+
+Looking at the binary representation of the digits and the decimal dot:
+```
+00101110 .
+00101111 /
+00110000 0
+00110001 1
+00110010 2
+00110011 3
+00110100 4
+00110101 5
+00110110 6
+00110111 7
+00111000 8
+00111001 9
+```
+We can see that the least significant 4 bits in every byte are the only ones that are relevant, so by taking 4 bits from each of the 4 bytes, we reduces the amount of items needed in the table to 65536, and using a `u16` for each we only need 128KiB to store the entire table.  
+
+To quickly take the first 4 bits from every byte, I used the `pext` instruction, which takes a mask of relevant bits, and returns the relevant bits packed together, for example with the number `45.1`:
+```
+4       5       .       1
+00110100001101010010111000110001
+```
+Reading it is a `u32` reverses the byte order because the computer stores numbers in little-endian order, so after reading is is actually `00110001001011100011010100110100`.  
+And then with the mask `00001111000011110000111100001111`, `pext` returns the output `0001111001010100`, which will be used as the index into the lookup table.
+
+So the full code for the new parsing function is:
+
+```rust
+fn parse_measurement(text: &[u8]) -> i32 {
+    static LUT: [i16; 1<<16] = {
+        let mut lut = [0; 1<<16];
+        let mut i = 0usize;
+        while i < (1<<16) {
+            let digit0 = i as i16 & 0xf;
+            let digit1 = (i >> 4) as i16 & 0xf;
+            let digit2 = (i >> 8) as i16 & 0xf;
+            let digit3 = (i >> 12) as i16 & 0xf;
+            lut[i] = if digit1 == b'.' as i16 & 0xf {
+                digit0 * 10 + digit2
+            } else {
+                digit0 * 100 + digit1 * 10 + digit3
+            };
+            i += 1;
+        }
+        lut
+    };
+    let negative = unsafe { *text.get_unchecked(0) } == b'-';
+    let raw_key = unsafe { (text.as_ptr().add(negative as usize) as *const u32).read_unaligned() };
+    let packed_key = unsafe { _pext_u32(raw_key, 0b00001111000011110000111100001111) };
+    let abs_val = unsafe { *LUT.get_unchecked(packed_key as usize) } as i32;
+    if negative { -abs_val } else { abs_val }
+}
+```
+
+Some things to note:
+
+- The code to compute every result is ran at compile time, and it only runs 64K times and not a billion times, so it does not have to be particularly optimized.
+- The table has a huge amount of indices that are not actually valid numbers and will never be read, but there is no way to remove them without making the indexing into the table more complicated.
+
+The new parser is much faster:
+
+```bash
+Time (mean ± σ):      8.018 s ±  0.012 s    [User: 7.599 s, System: 0.399 s]
+Range (min … max):    7.999 s …  8.033 s    10 runs
+```
+
+Next, I tried making another memory trade off, by storing the negative measurements in the table as well and incorporating the `negative` boolean into the index, making it twice as big but saving the inversion step:
+```rust
+fn parse_measurement_(text: &[u8]) -> i32 {
+    static LUT: [i16; 1 << 17] = {
+        let mut lut = [0; 1 << 17];
+        let mut i = 0usize;
+        while i < (1 << 16) {
+            let digit0 = i as i16 & 0xf;
+            let digit1 = (i >> 4) as i16 & 0xf;
+            let digit2 = (i >> 8) as i16 & 0xf;
+            let digit3 = (i >> 12) as i16 & 0xf;
+            lut[i] = if digit1 == b'.' as i16 & 0xf {
+                digit0 * 10 + digit2
+            } else {
+                digit0 * 100 + digit1 * 10 + digit3
+            };
+            lut[i + (1 << 16)] = -lut[i];
+            i += 1;
+        }
+        lut
+    };
+    let negative = (unsafe { *text.get_unchecked(0) } == b'-') as usize;
+    let raw_key = unsafe { (text.as_ptr().add(negative) as *const u32).read_unaligned() };
+    let packed_key = unsafe { _pext_u32(raw_key, 0b00001111000011110000111100001111) };
+    unsafe { *LUT.get_unchecked(packed_key as usize + (negative << 16)) as i32 }
+}
+```
+
+But the result was very slightly slower:
+```bash
+Time (mean ± σ):      8.030 s ±  0.008 s    [User: 7.616 s, System: 0.393 s]
+Range (min … max):    8.020 s …  8.051 s    25 runs
 ```
 
 ## Optimizing The Output For No Benefit
@@ -1200,13 +1337,14 @@ While solving this challenge I have attempted some optimizations that did not re
 - I tried using PGO(Profile Guided Optimizations) for a "simple" optimization, but that resulted in a slowdown of around a tenth of a second.
 - I was not satisfied with the performance of `parse_measurement`, and thought I could beat the compiler with hand written inline assembly, but the result was tens of milliseconds behind the compiler's version.
 
-## Summary And Final Single Threaded Results
+## Final Single Threaded Results - 5.9 seconds
 
 In this very long post I have improved my solution for the one billion row challenge from over a minute to under 10 seconds, using a lot of different optimization methods.  
 To end this part of the challenge, I will run the benchmark again, without the CPU locked to a stable 3.5GHz to get it even faster:
 ```bash
-Time (mean ± σ):      6.279 s ±  0.027 s    [User: 5.958 s, System: 0.307 s]
-Range (min … max):    6.222 s …  6.323 s    50 runs
+PLACEHOLDER, NEED NEW MEASUREMENT
+Time (mean ± σ):      6.138 s ±  0.061 s    [User: 5.818 s, System: 0.300 s]
+Range (min … max):    5.982 s …  6.322 s    25 runs
 ```
 And the final flamegraph for the solution looks like [this](flamegraph_final.svg)
 
