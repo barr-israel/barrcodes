@@ -1334,8 +1334,17 @@ While solving this challenge I have attempted some optimizations that did not re
 - I found that 90% of the lines are shorter than 16 bytes, which means I can fit at least 2 lines in a single 32 byte SIMD to potential speed up the line reading.  
   Unfortunately, the more complex flow in `line_read` that included a loop that parses a line for every 1 in the resulting mask caused a slowdown of a few seconds.
 - Creating the different slices from each line generated a bounds check, which I wanted to eliminate, but adding another `assert_unchecked` did not have an effect, and replacing the slice creation with an `unchecked_get` version resulted in a slowdown of a second and a half I could not explain, and it is not worth exploring it just to save 2 instructions that do not take any significant time.
-- I tried using PGO(Profile Guided Optimizations) for a "simple" optimization, but that resulted in a slowdown of around a tenth of a second.
-- I was not satisfied with the performance of `parse_measurement`, and thought I could beat the compiler with hand written inline assembly, but the result was tens of milliseconds behind the compiler's version.
+- I tried using PGO(Profile Guided Optimizations) for a "simple" optimization, but that resulted in a slowdown of around a tenth of a second.  
+- Before writing the lookup table variant of `parse_measurement`, I thought I could beat the compiler with hand written inline assembly, but the result was tens of milliseconds behind the compiler's version.
+
+## Unexplained Regression When Slicing Differently
+
+The current version of `read_line` uses normal indexing to create the slices passed to `parse_measurement` and back to the main function, which means they emit bounds checks.  
+Additionally, the measurement slice is currently created using `&text[separator_pos + 1..line_break_pos]` which technically needs an extra byte to avoid UB when it is read as a `u32`.  
+For a reason I can't explain, making the slice longer by one, making it only using a starting index, working with pointers instead of slice, or making the slice using an unsafe unchecked method, all of those increase the run time by ~100-200ms.  
+The only difference I found in the generated instructions is the removed bounds check(which consumed very little time as it was predicted perfectly).  
+For now I'm leaving it as is for maximum performance.
+If anyone can figure out what causes this regression I would appreciate an explanation.  
 
 ## Final Single Threaded Results - 5.9 seconds
 
