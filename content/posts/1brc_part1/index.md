@@ -59,8 +59,8 @@ And then waiting waiting a few minutes for the 14GB text file to be generated:
 ## Benchmarking Methodology
 
 Unless stated otherwise, all measurements in this challenge will be done using [hyperfine](https://github.com/sharkdp/hyperfine), on the same machine equipped with an Intel Core Ultra 7 165H and 32GiB of LPDDR5 Memory running at 6400 MT/s.  
-For more stable results and to avoid thermal throttling, until the final benchmark the CPU frequency will be locked to 3.5GHz using `cpupower frequency-set`, and the single-threaded versions will be locked to a single core using `taskset -c 2`.  
-Core 2 is specifically chosen to avoid core 0(and its SMT sibling core 1) which handles some kernel related work, and to ensure the program always runs on a performance core and not an efficiency core, as Intel's newer CPUs utilise a hybrid approach combining two different types of cores on the same CPU.  
+For more stable results and to avoid thermal throttling, until the final benchmark the CPU frequency will be locked to 3.5GHz using `cpupower frequency-set`, and the single-threaded versions will be locked to a single core using `taskset -c 1`.  
+Core 1 is specifically chosen to avoid core 0(and its SMT sibling core 5) which handles some kernel related work, and to ensure the program always runs on a performance core and not an efficiency core, as Intel's newer CPUs utilise a hybrid approach combining two different types of cores on the same CPU.  
 
 > [!NOTE] hyperfine
 > [hyperfine](https://github.com/sharkdp/hyperfine) is a simple benchmarking tool that automatically runs a program enough time to be statistically certain to a high enough degree that the measurement is accurate.
@@ -85,7 +85,7 @@ The measurements file is preloaded into the page cache using [vmtouch](https://g
 My first step is gauging a rough possible range of run time.
 
 ### Lower Bound
-By simply reading the entire file without doing any computation, we can approximate the fastest we can go on one core:
+By simply reading the entire file without doing any computation, we can roughly approximate the fastest we can go on one core:
 
 ```bash
 $ taskset -c 2 hyperfine 'cat measurements.txt'
@@ -1346,14 +1346,13 @@ The only difference I found in the generated instructions is the removed bounds 
 For now I'm leaving it as is for maximum performance.
 If anyone can figure out what causes this regression I would appreciate an explanation.  
 
-## Final Single Threaded Results - 5.9 seconds
+## Final Single Threaded Results - 6.12 seconds
 
 In this very long post I have improved my solution for the one billion row challenge from over a minute to under 10 seconds, using a lot of different optimization methods.  
 To end this part of the challenge, I will run the benchmark again, without the CPU locked to a stable 3.5GHz to get it even faster:
 ```bash
-PLACEHOLDER, NEED NEW MEASUREMENT
-Time (mean ± σ):      6.138 s ±  0.061 s    [User: 5.818 s, System: 0.300 s]
-Range (min … max):    5.982 s …  6.322 s    25 runs
+Time (mean ± σ):      6.174 s ±  0.021 s    [User: 5.864 s, System: 0.297 s]
+Range (min … max):    6.143 s …  6.204 s    10 runs
 ```
 And the final flamegraph for the solution looks like [this](flamegraph_final.svg)
 
