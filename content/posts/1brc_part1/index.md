@@ -962,7 +962,7 @@ cmp          $0x2d,%al
 cmove        %r10d,%ebx
 ```
 Moves the value in register `ebx` into register `r10d` only of the value in register `al` is equal to `0x2d`.  
-Conditional move instructions operate based on CPU flags that are set whenever values are compared, and the basic `cmove` operates if the values were equal(Other variations can be found [here](https://www.felixcloutier.com/x86/cmovcc).
+Conditional move instructions operate based on CPU flags that are set whenever values are compared, and the basic `cmove` operates if the values were equal(Other variations can be found [here](https://www.felixcloutier.com/x86/cmovcc)).
 
 ### Indexing Using Booleans
 
