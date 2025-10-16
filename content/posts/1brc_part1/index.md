@@ -63,7 +63,7 @@ For more stable results and to avoid thermal throttling, until the final benchma
 Core 1 is specifically chosen to avoid core 0(and its SMT sibling core 5) which handles some kernel related work, and to ensure the program always runs on a performance core and not an efficiency core, as Intel's newer CPUs utilise a hybrid approach combining two different types of cores on the same CPU.  
 
 > [!NOTE] hyperfine
-> [hyperfine](https://github.com/sharkdp/hyperfine) is a simple benchmarking tool that automatically runs a program enough time to be statistically certain to a high enough degree that the measurement is accurate.
+> [hyperfine](https://github.com/sharkdp/hyperfine) is a simple benchmarking tool that runs a given program many times to generate an average and a range of statistically likely run times.  
 > It is useful to very easily measure the run time of complete and short programs in their entirety without modifying or recompiling the code, which fits this challenge.
 
 The measurements file is preloaded into the page cache using [vmtouch](https://github.com/hoytech/vmtouch) to eliminate the overhead of reading it from disk.
@@ -88,7 +88,7 @@ My first step is gauging a rough possible range of run time.
 By simply reading the entire file without doing any computation, we can roughly approximate the fastest we can go on one core:
 
 ```bash
-$ taskset -c 2 hyperfine 'cat measurements.txt'
+$ taskset -c 1 hyperfine 'cat measurements.txt'
 Benchmark 1: cat measurements.txt
   Time (mean ± σ):      1.355 s ±  0.007 s    [User: 0.005 s, System: 1.346 s]
   Range (min … max):    1.347 s …  1.368 s    10 runs
@@ -98,10 +98,10 @@ Note that the entire file is in file cache, so no actual disk I/O is done:
 
 ### Upper Bound
 
-The challenge repository also contains a [baseline implementation](https://github.com/gunnarmorling/1brc/blob/main/src/main/java/dev/morling/onebrc/CalculateAverage_baseline.java) in Java, the runs on a single core and does not have any particular optimizations applied to it.  
+The challenge repository also contains a [baseline implementation](https://github.com/gunnarmorling/1brc/blob/main/src/main/java/dev/morling/onebrc/CalculateAverage_baseline.java) in Java, that runs on a single core and does not have any particular optimizations applied to it.  
 Of course, my solution could still be slower, but it provides a simple rough upper bound:
 ```bash
-$ taskset -c 2 hyperfine ./calculate_average_baseline.sh
+$ taskset -c 1 hyperfine ./calculate_average_baseline.sh
 Benchmark 1: ./calculate_average_baseline.sh
   Time (mean ± σ):     137.615 s ±  7.713 s    [User: 134.325 s, System: 2.623 s]
   Range (min … max):   130.097 s … 148.467 s    10 runs
@@ -444,7 +444,7 @@ impl From<StationName> for String {
 And using it as the key to the hash map. Not using all the bytes could increase the collision rate in the hash map, but the station names are varied enough that almost no pair of stations share the same first 8 bytes.    
 This takes the run time down to **47 seconds**.  
 
-There is no point to hash less than 8 bytes at a time because every smaller size will just get automatically extended to 8 bytes if it is smaller, before the hashing(in the default hasher and many other hashers).
+There is no point in hashing less than 8 bytes at a time because every smaller size will just get automatically extended to 8 bytes if it is smaller, before the hashing(in the default hasher and many other hashers).
 
 ### Hashing Faster
 
@@ -596,8 +596,8 @@ Range (min … max):   24.812 s … 25.260 s    10 runs
 
 ### Fixing Hashing Again - 19.2 seconds
 
-The new `StationName` can't rely on the same method to hash the full 8 bytes, as not all station names have enough bytes, so reading them is both unsafe, and could read part of the following number to compute the hash, which will result in an inconsistent hash.  
-And a [new flamegraph](flamegraph6.svg) shows that the byte by byte hashing is again very slow, taking 9.6% of the time.  
+The new `StationName` can't be read as a `u64` like it was before, because there are unknown bytes past the `;`, which will make the generated hash inconsistent.  
+Additionally, a [new flamegraph](flamegraph6.svg) shows that the byte by byte hashing is again very slow, taking 9.6% of the time.  
 To solve that, one solution is to notice that all possible station names *are* at least 3 bytes, and with the separating `;` character, the first 4 bytes are consistent for the same station.  
 So by taking the `;` along with the character(and stripping it during printing), hashing 4 bytes at a time is possible.  
 ```rust
@@ -661,7 +661,7 @@ fn read_line(text: &[u8]) -> (&[u8], &[u8], &[u8]) {
 }
 ```
 
-`#[cfg(target_feature = "avx2")]` causes the function to only be compiled if the feature is enabled, and `#[target_feature(enable = "avx2")]` allows using AVX2 operations inside the function without `unsafe`
+`#[cfg(target_feature = "avx2")]` causes the function to only be compiled if the feature is enabled, and `#[target_feature(enable = "avx2")]` allows using `AVX2` operations inside the function without `unsafe`.  
 So now we can to use any SIMD operation that requires the `AVX2`(or any of the extensions it is a superset of, such as `SSE` and `AVX`) inside the function.
 
 I am not planning to run this code on any machine that does not support `AVX2`, but I might as well support doing that.  
@@ -949,12 +949,47 @@ There is no way I can think of to eliminate the length comparison. Even if there
 
 One way to eliminate the cost of branch mispredictions is to write branch-less code, which means writing code that contains no branch instructions while achieving the same result.  
 Branch-less code is often harder to write, and is sometimes slower than the branching version when the branch is predicated well by the CPU, but this is not the case here.  
-One useful tool for branch-less programming is the conditional move instruction.  
+Two useful tools for branch-less programming are the conditional move instruction, and array indexing using booleans.  
 
-### The Conditional Move Instruction
+### The Conditional Move Instruction In x86
 
-The `cmov` instruction(and its variants), take 2 parameters: 1 destination register and 1 source register, and it copies the value of the source register if the last comparison done was true by checking the comparison flag in the CPU.  
-Usually there is no need to explicitly write this instruction, and instead we write in a way that encourages the compiler to use it, for example:
+The `cmove` instruction(and its variants), take 2 parameters: 1 destination register and 1 source register, and it copies the value of the source register if the last comparison done was true by checking the comparison flag in the CPU.  
+
+For example:
+
+```asm
+cmp          $0x2d,%al
+cmove        %r10d,%ebx
+```
+Moves the value in register `ebx` into register `r10d` only of the value in register `al` is equal to `0x2d`.  
+Conditional move instructions operate based on CPU flags that are set whenever values are compared, and the basic `cmove` operates if the values were equal(Other variations can be found [here](https://www.felixcloutier.com/x86/cmovcc).
+
+### Indexing Using Booleans
+
+The CPU is able to use comparison results as indexes, for example, the `sete` instruction stores the equality flag into a register that can be used like any other value.  
+That means that if we store 2 possible results in an array, we can use the flag we stored as an index into it.
+
+For example:
+```asm
+  xor          %r9d,%r9d
+  cmp          $0x2d,%al
+  sete         %r9b
+  movzbl       (%r9,%r8,1),%r8d
+```
+This code:
+
+1. Zeros the register `r9`.  
+1. Compares the value in register `al` to the value `0x2d`.  
+1. Saves the comparison result in `r9b`(the lower byte of `r9`).  
+1. Loads the value from the address that is the sum of the values in `r8` and `r9`, into the register `r8d`.  
+
+That means that after these instructions run, `r8d` will contain the value at `r9` if `al` does not contain `0x2d`, and the value at `r9 + 1` if it contains a different value.  
+
+Another way to index using a comparison is by multiplying the stored flag with an index, that way the result will be 0 if the flag was 0.
+
+### Encouraging The Compiler To Avoid Branches
+
+Usually there is no need to explicitly write these instruction manually, and instead we write code in a way that encourages the compiler to use it, for example:
 
 ```rust
 let bonus = if team = TEAM::BLUE{
@@ -964,8 +999,7 @@ let bonus = if team = TEAM::BLUE{
 }
 ```
 
-is one way to encourage the compiler to use `cmov`.  
-In other languages, ternary operators(which do not exist in Rust) achieve a similar result, and sometimes using an array of size 2 and indexing into it also helps achieve this:
+In other languages, ternary operators(which do not exist in Rust) often achieve a similar result, and sometimes using an array of size 2 and indexing into it also helps achieve this:
 
 ```rust
 let bonus_options = [10,5];
@@ -978,10 +1012,12 @@ Alternatively, multiplying by a boolean cast to a number often achieves a simila
 let bonus = 10-(5*(team==TEAM::BLUE as i32));
 ```
 
-Conditional moves have 2 downsides compared to normal branches:
+### The Downsides Of Branch-less Code
 
-- They are limited to moving values, and can't do the general flow control normal branches can.
-- They create a data dependency chain in the CPU, unlike normal branches.
+Code that was optimized to be branch-less usually has 2 downsides compared to normal branches:
+
+- The possible computations done without branches is limited in comparison.
+- Branch-less operations create an additional data dependency chain in the CPU, compared to branches.
 
 Data dependencies are a complicated topic that in this case they boil down to the following example:  
 Consider the following code:
@@ -1073,7 +1109,7 @@ The 3 main changes here are:
 > I have also tried incorporating the "at least 4 if negative" property within the first `assert_unchecked` using `assert_unchecked(text.len() >= (3 + (text[0] == b'-') as usize));
 `, but it did not have the desired effect.
 
-The generated assembly does not contain the offending branches anymore, and it contains many `cmov` instructions:
+The generated assembly does not contain the offending branches anymore, and it contains `cmov` instructions, and `movzbl` instructions that use the boolean as an offset optimization.
 
 ```asm
 let negative = text[0] == b'-';
@@ -1265,7 +1301,7 @@ fn parse_measurement(text: &[u8]) -> i32 {
 
 Some things to note:
 
-- The code to compute every result is ran at compile time, and it only runs 64K times and not a billion times, so it does not have to be particularly optimized.
+- The code to compute every result is ran at compile time, and it only runs 64K times and not a billion times, so it does not have to be particularly optimized when the goal is maximum *runtime* performance.
 - The table has a huge amount of indices that are not actually valid numbers and will never be read, but there is no way to remove them without making the indexing into the table more complicated.
 
 The new parser is much faster:
@@ -1332,9 +1368,10 @@ While solving this challenge I have attempted some optimizations that did not re
 - I tried to get the file to be mapped onto huge pages in memory, which should be possible with the correct setup, but nothing I tried made it happen.
 - I tried to find a way to completely skip parsing and find max/min/sum without parsing the measurement so I could parse once at the end, but I could not come up with any way that doesn't come with a slow down.
 - I found that 90% of the lines are shorter than 16 bytes, which means I can fit at least 2 lines in a single 32 byte SIMD to potential speed up the line reading.  
-  Unfortunately, the more complex flow in `line_read` that included a loop that parses a line for every 1 in the resulting mask caused a slowdown of a few seconds.
+  Unfortunately, the more complex flow in `line_read` that included a loop that parses a line for every 1 in the resulting mask caused a slowdown of a few seconds.  
+  I do suspect that using AVX512 and always parsing *exactly* 2 lines per `line_read` will achieve some speed-up.
 - Creating the different slices from each line generated a bounds check, which I wanted to eliminate, but adding another `assert_unchecked` did not have an effect, and replacing the slice creation with an `unchecked_get` version resulted in a slowdown of a second and a half I could not explain, and it is not worth exploring it just to save 2 instructions that do not take any significant time.
-- I tried using PGO(Profile Guided Optimizations) for a "simple" optimization, but that resulted in a slowdown of around a tenth of a second.  
+- I tried using PGO(Profile Guided Optimizations) for a easy performance boost, but that resulted in a slowdown of around a tenth of a second.  
 - Before writing the lookup table variant of `parse_measurement`, I thought I could beat the compiler with hand written inline assembly, but the result was tens of milliseconds behind the compiler's version.
 
 ## Unexplained Regression When Slicing Differently
