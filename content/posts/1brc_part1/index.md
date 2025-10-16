@@ -1361,6 +1361,93 @@ let _ = out.write_fmt(format_args!("{station_name}={min:.1}/{avg:.1}/{max:.1}, "
 ```
 As expected, there is no measurable difference in the run time.
 
+## Benchmarking A Compliant Solution
+
+Earlier in the optimization stages, I use the assumption that station names are between 3 and 27 bytes.  
+That assumption is correct for all possible measurement files, but the challenge specifies solutions should support 1-100 bytes.  
+So just to compare how much supporting those lengths would cost in performance, I made a compliant version, it ***will not*** be used as a base for the multi-threaded solutions, or for the final single threaded performance benchmark.
+
+The changes I made to support these lengths are mostly fallbacks which minimize the cost for the common path - names that are 3-27 bytes.  
+To compare longer names I used the standard slice comparison when a given name is too long:
+```rust
+fn eq_inner(&self, other: &Self) -> bool {
+  if self.len > 32 {
+      let self_slice = unsafe { from_raw_parts(self.ptr, self.len as usize) };
+      let other_slice = unsafe { from_raw_parts(other.ptr, other.len as usize) };
+      return self_slice == other_slice;
+  }
+  ...
+}
+```
+
+And to handle hashing names that are less than 3 bytes I mask bytes that are not part of the name:
+```rust
+fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    let ptr = self.ptr as *const u32;
+    let sample = unsafe { ptr.read_unaligned() };
+    let mask = (1 << (self.len * 8 - 1).min(31)) - 1;
+    (sample & mask).hash(state)
+}
+```
+
+Those two changes barely affect the run time of the solution:
+
+```bash
+Time (mean ± σ):      8.042 s ±  0.011 s    [User: 7.627 s, System: 0.392 s]
+Range (min … max):    8.020 s …  8.055 s    10 runs
+```
+
+Of course, given a measurements file that actually contains such long names, the new branch during comparison will no longer be perfectly predictable and might even make it slower than always using the standard slice comparison.
+
+The real performance issue with being more complaint appears in `read_line`: In order to find the length of the station name, I have to go back to `memchr` since the `;` is no longer guaranteed to be in the first 33 bytes of the line.  
+After `memchr` finds the end of the station name, I can still use a SIMD solution for the measurement, since those are always short enough, And this time I can even use 128 bit registers instead of 256.  
+So the new `read_line` looks like this:
+```rust
+fn read_line(mut text: &[u8]) -> (&[u8], StationName, i32) {
+    let station_name_slice: &[u8];
+    (station_name_slice, text) = text.split_at(memchr(b';', &text[3..]).unwrap() + 3);
+    text = &text[1..]; //skip ';';
+    let line_break: __m128i = _mm_set1_epi8(b'\n' as i8);
+    let line_remainder: __m128i = unsafe { _mm_loadu_si128(text.as_ptr() as *const __m128i) };
+    let line_break_mask = _mm_movemask_epi8(_mm_cmpeq_epi8(line_remainder, line_break));
+    let line_break_pos = line_break_mask.trailing_zeros() as usize;
+    (
+        &text[line_break_pos + 1..],
+        StationName {
+            ptr: station_name_slice.as_ptr(),
+            len: station_name_slice.len() as u8,
+        },
+        parse_measurement(&text[..line_break_pos]),
+    )
+}
+```
+
+And this time a lot of performance was lost:
+```bash
+Time (mean ± σ):     12.864 s ±  0.041 s    [User: 12.436 s, System: 0.403 s]
+Range (min … max):   12.822 s … 12.914 s    10 runs
+```
+
+
+I tried helping the compiler by marking the long name case as unlikely using the nightly feature `std::hint::unlikely`.  
+`unlikely` tells the compiler that some boolean is more commonly false and it should optimize with that under consideration.  
+Because it is a nightly feature, I also had to switch to the nightly compiler.  
+This version is much slower:
+```bash
+Time (mean ± σ):     12.787 s ±  0.015 s    [User: 12.366 s, System: 0.396 s]
+Range (min … max):   12.770 s … 12.812 s    10 runs
+```
+
+However, measuring just using the nightly compiler without `unlikely` already gives most of the speedup compared to the stable compiler, so `unlikely` is not doing a lot here:
+```bash
+Time (mean ± σ):     12.789 s ±  0.011 s    [User: 12.366 s, System: 0.398 s]
+Range (min … max):   12.773 s … 12.815 s    10 runs
+```
+
+I have also tested using the nightly compiler on the main, non-compliant solution and it resulted in a higher run time than the stable compiler.
+
+So based on these benchmarks we can see that being more compliant with the exact rules instead of the actual possible inputs makes it much slower.
+
 ## Failed Optimizations
 
 While solving this challenge I have attempted some optimizations that did not result in any improvement or even a regression so they did not make it into the post until now, but some are still worth mentioning:
