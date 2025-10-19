@@ -1399,7 +1399,7 @@ Range (min … max):    8.020 s …  8.055 s    10 runs
 
 Of course, given a measurements file that actually contains such long names, the new branch during comparison will no longer be perfectly predictable and might even make it slower than always using the standard slice comparison.
 
-The real performance issue with being more complaint appears in `read_line`: In order to find the length of the station name, I have to go back to `memchr` since the `;` is no longer guaranteed to be in the first 33 bytes of the line.  
+The real performance issue with being more complaint appears in `read_line`: In order to find the length of the station name, I have to went back to `memchr` since the `;` is no longer guaranteed to be in the first 33 bytes of the line.  
 After `memchr` finds the end of the station name, I can still use a SIMD solution for the measurement, since those are always short enough, And this time I can even use 128 bit registers instead of 256.  
 So the new `read_line` looks like this:
 ```rust
@@ -1428,25 +1428,70 @@ Time (mean ± σ):     12.864 s ±  0.041 s    [User: 12.436 s, System: 0.403 s]
 Range (min … max):   12.822 s … 12.914 s    10 runs
 ```
 
+Inspecting the way `memchr` looks for a byte, I saw that it reads 4 chunks of 256 bits every time, which helps eliminate some overhead when the byte is not close to the start of the slice.  
+But since in this case it is always near the start, I thought that a simple loop that reads 256 bytes at a time could be faster:
 
-I tried helping the compiler by marking the long name case as unlikely using the nightly feature `std::hint::unlikely`.  
-`unlikely` tells the compiler that some boolean is more commonly false and it should optimize with that under consideration.  
-Because it is a nightly feature, I also had to switch to the nightly compiler.  
-This version is much slower:
-```bash
-Time (mean ± σ):     12.787 s ±  0.015 s    [User: 12.366 s, System: 0.396 s]
-Range (min … max):   12.770 s … 12.812 s    10 runs
+```rust
+(station_name_slice, text) = loop {
+    let line_remainder: __m256i =
+        unsafe { _mm256_loadu_si256(text.as_ptr() as *const __m256i) };
+    let seperator_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(seperator, line_remainder));
+    if seperator_mask == 0 {
+        text = &text[32..];
+    } else {
+        break text.split_at(seperator_mask.trailing_zeros() as usize);
+    }
+};
 ```
 
-However, measuring just using the nightly compiler without `unlikely` already gives most of the speedup compared to the stable compiler, so `unlikely` is not doing a lot here:
+But it ended up being slower:
+
 ```bash
-Time (mean ± σ):     12.789 s ±  0.011 s    [User: 12.366 s, System: 0.398 s]
-Range (min … max):   12.773 s … 12.815 s    10 runs
+Time (mean ± σ):     13.635 s ±  0.017 s    [User: 13.045 s, System: 0.406 s]
+Range (min … max):   13.619 s … 13.664 s    10 runs
 ```
 
-I have also tested using the nightly compiler on the main, non-compliant solution and it resulted in a higher run time than the stable compiler.
+Finally, I reused the already loaded vector for the `\n` search *if* the `;` was found early enough within the vector: if the `;` is within the first 27 bytes, the `\n` must also be within the vector. Otherwise, it could potentially be outside the vector, so a new load must be done from that address:  
 
-So based on these benchmarks we can see that being more compliant with the exact rules instead of the actual possible inputs makes it much slower.
+```rust
+let seperator: __m256i = _mm256_set1_epi8(b';' as i8);
+let line_break: __m256i = _mm256_set1_epi8(b'\n' as i8);
+let mut len = 0usize;
+loop {
+    let line_remainder: __m256i =
+        unsafe { _mm256_loadu_si256(text.as_ptr().add(len) as *const __m256i) };
+    let seperator_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(seperator, line_remainder));
+    if seperator_mask == 0 {
+        len += 32;
+    } else {
+        let seperator_pos = seperator_mask.trailing_zeros() as usize;
+        if seperator_pos > 27 {
+            // line break potentially outside vector
+            unsafe { _mm256_loadu_si256(text.as_ptr().add(len) as *const __m256i) };
+        }
+        let line_break_mask =
+            _mm256_movemask_epi8(_mm256_cmpeq_epi8(line_remainder, line_break));
+        let line_break_pos = line_break_mask.trailing_zeros() as usize;
+        let search_end_ptr = &text[len..];
+        return (
+            &search_end_ptr[line_break_pos + 1..],
+            StationName {
+                ptr: text.as_ptr(),
+                len: len as u8 + seperator_pos as u8,
+            },
+            parse_measurement(&search_end_ptr[seperator_pos + 1..line_break_pos]),
+        );
+    }
+}
+```
+
+This improved the performance significantly, shrinking most of the gap between the compliant and the non-compliant version, but still significantly slower:
+```bash
+Time (mean ± σ):      9.508 s ±  0.038 s    [User: 9.095 s, System: 0.394 s]
+Range (min … max):    9.470 s …  9.577 s    10 runs
+```
+
+And now, back to the non-compliant version.
 
 ## Failed Optimizations
 
