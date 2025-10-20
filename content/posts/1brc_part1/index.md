@@ -192,6 +192,11 @@ strip = false
 The `max` profile contains the most aggressive optimizations that a profile can apply, and the `bench` profile is the same with the addition of some debugging information that can help debug and gather performance metrics.  
 In most cases there will actually be no measurable difference between the two profiles.
 
+> [!Warning] panic = "abort"
+> The `panic = "abort"` setting usually has an immeasurably small effect on normal runtime performance.  
+> Outside a scenario where the program panics, the difference is essentially a slightly smaller binary due to not needing the unwinding code.
+> When the program *does* panic, setting it to abort skips unwinding the stack and cleaning up resources. That also means that recovering from a panic is no longer possible.
+
 Running the same code with the `max` profile improves the performance a little, to **90 seconds**:
 ```bash
 Time (mean ± σ):     90.245 s ±  0.619 s    [User: 86.582 s, System: 3.426 s]
@@ -1361,6 +1366,32 @@ let _ = out.write_fmt(format_args!("{station_name}={min:.1}/{avg:.1}/{max:.1}, "
 ```
 As expected, there is no measurable difference in the run time.
 
+## A Confusing Finishing Touch
+
+I wanted to clean the code a bit by replacing the `(i32,i32,i32,i32)` with a new struct `StationEntry` that held the 4 integers.  
+So I initially simply wrote it as:
+```rust
+// final_single_thread.rs
+struct StationEntry {
+    min: i32,
+    max: i32,
+    sum: i32,
+    count: i32,
+}
+```
+
+And observed a significant slowdown:
+```bash
+Time (mean ± σ):      8.443 s ±  0.023 s    [User: 8.020 s, System: 0.400 s]
+Range (min … max):    8.409 s …  8.482 s    10 runs
+```
+That was very confusing as simply giving a name to the tuple should not have any effect.  
+Then I noticed that the original order was `(min,sum,max,count)` and tried reordering `StationEntry` to be the same.  
+Surprisingly, this restored the original performance.  
+So for a reason I can't explain, the order of these 4 integers matters.  
+I experimented with other orders, and as far as I can tell, if and only if the `sum` and `count` members are adjacent, performance suffers.
+
+
 ## Benchmarking A Compliant Solution
 
 Earlier in the optimization stages, I use the assumption that station names are between 3 and 27 bytes.  
@@ -1525,4 +1556,4 @@ Range (min … max):    6.143 s …  6.204 s    10 runs
 ```
 And the final flamegraph for the solution looks like [this](flamegraph_final.svg)
 
-In my next post I will improve the performance further by utilizing multiple threads.
+In my next post I will improve the performance further by utilizing multiple threads and experimenting with making the performance of each thread better on a CPU that supports AVX512.
