@@ -301,10 +301,200 @@ jq -r '.results[] | "\(.parameters.threads):\(.mean)"' bench.json
 
 And because these are way too many results to put on in a table, I generated a simple graph for it using Python:
 
-// TODO INSERT GRAPH
+![multi-threaded runtime](graph1.png)
+
+This graph shows that there using more threads is definitively much faster, but the speedup is not the ideal linear growth:  
+
+![speedup ratio](speedup_ratio1.png)
+
+Using all 112 is still very fast, taking only 323 ms, and beating all previous results(new benchmark with more runs):
+```bash
+Time (mean ± σ):     323.7 ms ±   2.7 ms    [User: 16596.7 ms, System: 1063.1 ms]
+Range (min … max):   319.5 ms … 333.9 ms    50 runs
+```
+
+So it is time to look for what overhead can be eliminated.
+
+## Looking For The Overhead
+
+I first tried running the non-`rayon` version to see whether `rayon` is making the performance worse with its work splitting system.
+
+The performance without `rayon` was actually slightly worse, so that is not it:
+```bash
+Benchmark 1: ./target/max/one-billion-row-challange 112
+  Time (mean ± σ):     330.4 ms ±   9.2 ms    [User: 16311.1 ms, System: 919.7 ms]
+  Range (min … max):   311.6 ms … 346.0 ms    20 runs
+```
+
+After a lot of more profiling that showed no new information, I added a simple time measurement inside the main function instead of measuring via `hyperfine`:
+```rust
+fn main() {
+    let start = Instant::now();
+    use_rayon::run();
+    let dur = start.elapsed().as_micros();
+    eprintln!("{}", dur);
+}
+```
+(using the standard error output to separate it from the answer printed into the standard output)
+
+Across 10 runs, the average timing for this is 687ms on the laptop, and 173ms on the server.  
+That means that almost half of the time on the server is spent unmapping the file.  
+That also explains unexpectedly low speedup from using so many threads.
+
+While I can't eliminate the time spent unmapping the file, it is a serial computation and removing it from the measurement on the graph will show the speedup given by multithreading in the rest of the program.  
+That will show how close the rest of the program is to a linear speedup.
+
+So measuring each thread count 20 times again and plotting the results gives:
+
+![multi-threaded runtime](graph2.png)
+
+![speedup ratio](speedup_ratio2.png)
+
+Still not a linear speedup but better than before.
+
+
+Now, after utilizing the many threads available on this CPU, I will try to utilize the new AVX512 instructions that are available on it.
+
+## AVX512
+
+The main improvement in AVX512 is the new 512 bit registers, that means every SIMD operation can potentially operate on twice as much data compared to the 256 bit registers in AVX2.  
+Unfortunately, these operations tend to be slower on some CPU models, so they often don't reach quite 2x the performance even with ideal data access.
+
+My first attempt at speeding up the program was rewrite the line splitting logic to do 2 lines at a time.  
+Using the assumption that every line station name is at least 3 bytes, we can always skip the first 3 bytes.  
+Using the assumption that every line is at most 33 bytes, we can deduce that after skipping the first 3 bytes, at least 2 entire lines are in the next 64 bytes(33+33-3=63).  
+So we can always extract 2 measurements from a read chunk of 64 bytes.  
+The benefits from that are not huge, as we only slightly increase the potential for out-of-order execution between 2 lines, and in total work we saved one read per 2 lines(we did one larger read instead of 2 smaller ones).
+
+So the rewritten logic is:
+
+```rust
+#[target_feature(enable = "avx512bw")]
+fn find_line_splits(text: &[u8]) -> (usize, usize, usize, usize) {
+    let separator: __m512i = _mm512_set1_epi8(b';' as i8);
+    let line_break: __m512i = _mm512_set1_epi8(b'\n' as i8);
+    let line: __m512i = unsafe { _mm512_loadu_si512(text.as_ptr() as *const __m512i) };
+    let separator_mask = _mm512_cmpeq_epi8_mask(line, separator);
+    let line_break_mask = _mm512_cmpeq_epi8_mask(line, line_break);
+    let separator_pos1 = separator_mask.trailing_zeros() as usize;
+    let line_break_pos1 = line_break_mask.trailing_zeros() as usize;
+    let var_name = separator_mask ^ (1 << separator_pos1);
+    let seperator_pos2 = var_name.trailing_zeros() as usize;
+    let var_name1 = line_break_mask ^ (1 << line_break_pos1);
+    let line_break_pos2 = var_name1.trailing_zeros() as usize;
+    (
+        separator_pos1,
+        line_break_pos1,
+        seperator_pos2,
+        line_break_pos2,
+    )
+}
+fn process_chunk(chunk: &[u8]) -> FxHashMap<StationName, StationEntry> {
+    let mut summary =
+        FxHashMap::<StationName, StationEntry>::with_capacity_and_hasher(1024, Default::default());
+    let mut remainder = chunk;
+    while (remainder.len() - MARGIN) != 0 {
+        let (separator_pos1, line_break_pos1, seperator_pos2, line_break_pos2) =
+            unsafe { find_line_splits(remainder) };
+        let station_name1 = StationName {
+            ptr: remainder.as_ptr(),
+            len: separator_pos1 as u8,
+        };
+        let measurement1 = parse_measurement(&remainder[separator_pos1 + 1..]);
+        let measurement2 = parse_measurement(&remainder[seperator_pos2 + 1..]);
+        add_measurement(&mut summary, station_name1, measurement1);
+        let remainder1 = &remainder[line_break_pos1 + 1..];
+        if (remainder1.len() - MARGIN) == 0 {
+            // need to exit now if odd number of lines in the chunk
+            break;
+        }
+        let station_name2 = StationName {
+            ptr: unsafe { remainder.as_ptr().add(line_break_pos1 + 1) },
+            len: (seperator_pos2 - line_break_pos1 - 1) as u8,
+        };
+        add_measurement(&mut summary, station_name2, measurement2);
+        remainder = &remainder[line_break_pos2 + 1..];
+    }
+    summary
+}
+fn add_measurement(
+    summary: &mut FxHashMap<StationName, StationEntry>,
+    station_name: StationName,
+    measurement: i32,
+) {
+    summary
+        .entry(station_name)
+        .and_modify(|e| {
+            if measurement < e.min {
+                e.min = measurement;
+            }
+            if measurement > e.max {
+                e.max = measurement;
+            }
+            e.sum += measurement;
+            e.count += 1;
+        })
+        .or_insert(StationEntry {
+            sum: measurement,
+            min: measurement,
+            max: measurement,
+            count: 1,
+        });
+}
+```
+
+Resulting in the following times(using 112 threads):
+```bash
+Time (mean ± σ):     324.1 ms ±   1.7 ms    [User: 16745.7 ms, System: 1046.2 ms]
+Range (min … max):   320.5 ms … 327.8 ms    20 runs
+```
+
+Very slightly slower than before..
+
+I also tried replacing the compare and move-mask instructions in the original 256-bit line reading with the new mask variation that directly creates a mask:
+```rust
+let separator_mask = _mm256_mask_cmpeq_epu8_mask(!0, line, separator);
+let line_break_mask = _mm256_mask_cmpeq_epu8_mask(!0, line, line_break);
+```
+
+But after inspecting the generated assembly it turns out the same instructions are generated in both cases(probably the compiler detecting the possible optimization with the previous code when AVX512 is available).
+
+Next, I tried using masked instructions in the comparison function that takes a much more significant amount of the time:
+
+```rust
+#[target_feature(enable = "avx512bw,avx512vl")]
+fn eq_inner(&self, other: &Self) -> bool {
+    if self.len != other.len {
+        return false;
+    }
+    let s = unsafe { _mm256_loadu_si256(self.ptr as *const __m256i) };
+    let o = unsafe { _mm256_loadu_si256(other.ptr as *const __m256i) };
+    let mask = (1 << self.len.max(other.len)) - 1;
+    let diff = _mm256_mask_cmpneq_epu8_mask(mask, s, o);
+    diff == 0
+}
+```
+
+
+And that was slightly faster:
+
+```bash
+Time (mean ± σ):     320.8 ms ±   3.0 ms    [User: 16379.9 ms, System: 1064.3 ms]
+Range (min … max):   317.1 ms … 334.1 ms    50 runs
+```
+
+I also tried using the masked load instructions available with AVX512 to only load relevant bytes, but that was slightly slower:
+
+```bash
+Time (mean ± σ):     323.3 ms ±   2.7 ms    [User: 16583.0 ms, System: 1064.4 ms]
+Range (min … max):   320.2 ms … 333.5 ms    50 runs
+```
+
+I don't have other ideas how to utilise AVX512 here, so only a very small gain was made.
 
 ## Summary
 
 In this part of the one billion rows challenge, I used multithreading to make my already pretty fast single threaded solution even faster.  
 I demonstrated a few ways to achieve this, and as expected, the fastest way is the one that requires the least synchronization between the threads.  
-Finally, with all the optimizations applied, the solution achieved a time of only 0.86 seconds.
+Then, when I ran out of software optimizations to apply, using better hardware was the next step.  
+By using a server equipped with 112 logical cores, I achieved a final time of 320.8 milliseconds, with almost half of the time being spent unmapping the memory mapped file at the end of the computation.
