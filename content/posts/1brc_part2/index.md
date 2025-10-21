@@ -326,7 +326,7 @@ Benchmark 1: ./target/max/one-billion-row-challange 112
   Range (min … max):   311.6 ms … 346.0 ms    20 runs
 ```
 
-After a lot of more profiling that showed no new information, I added a simple time measurement inside the main function instead of measuring via `hyperfine`:
+After some profiling that showed no new information, I added a simple time measurement inside the main function instead of measuring via `hyperfine`:
 ```rust
 fn main() {
     let start = Instant::now();
@@ -338,13 +338,29 @@ fn main() {
 (using the standard error output to separate it from the answer printed into the standard output)
 
 Across 10 runs, the average timing for this is 687ms on the laptop, and 173ms on the server.  
-That means that almost half of the time on the server is spent unmapping the file.  
+That means that almost half of the time on the server is spent before and after the main function.  
+By manually unmapping the file before returning from `run`, I saw the measured time with this method became equal to the results from `hyperfine`.  
+That means the almost half of the run time measured by `hyperfine` is spent unmapping the file when the process exits.  
 That also explains unexpectedly low speedup from using so many threads.
 
-While I can't eliminate the time spent unmapping the file, it is a serial computation and removing it from the measurement on the graph will show the speedup given by multithreading in the rest of the program.  
+Unmapping the file is a serial computation and removing it from the measurement on the graph will show the speedup given by multithreading in the rest of the program, which I have more control over.  
 That will show how close the rest of the program is to a linear speedup.
 
-So measuring each thread count 20 times again and plotting the results gives:
+So I measured each thread count 20 times again using a short bash script:
+```bash
+ #!/bin/bash
+for threads in {1..112}; do
+    sum=0
+    for run in {1..20}; do
+        time=$(./target/max/one-billion-row-challange $threads 2>&1 1>/dev/null )
+        sum=$(awk "BEGIN {print $sum + $time}")
+    done
+    avg=$(awk "BEGIN {printf \"%.3f\", $sum / 20}")
+    echo "$threads,$avg"
+done
+```
+
+And then plotted the results:
 
 ![multi-threaded runtime](graph2.png)
 
@@ -353,9 +369,75 @@ So measuring each thread count 20 times again and plotting the results gives:
 Still not a linear speedup but better than before.
 
 
+## Eliminating The File Unmapping Time
+
+I really wanted to eliminate this time, and noticed that in the original challenge, some of the Java solutions used a separate worker process to do the work as a trick to not count the unmapping time.
+
+To achieve a similar result in Rust I used this solution:
+
+```rust
+fn main() {
+    let (mut reader, writer) = std::io::pipe().unwrap();
+    if unsafe { libc::fork() } == 0 {
+        use_rayon::run(writer);
+    } else {
+        _ = reader.read_exact(&mut [0u8]);
+    }
+}
+```
+
+And I added this to the end of `run`:
+```rust
+_ = out.flush();
+writer.write_all(&[0]).unwrap();
+```
+
+What happens here is that the child process does all the work and prints the result, and then notifies the parent that it may exit.  
+Without waiting for the child process to notify it, the parent will immediately exit with an empty output.
+
+> [!Info] The `fork` System Call
+> The `fork` system call duplicates the current process, creating a child process(and the original process is called the parent process).
+> The child process is almost entirely identical to the original process, with the main distinction being that the `fork` call returns 0 to the child, and the process ID of the child to the parent.  
+> `fork` is most often used to start new programs by immediately calling `exec` to replace the child with a different program.  
+> But in this case, we actually want the child to be a worker process for the parent.  
+> The parent and child start with identical memory, but they do not share it. That is why we need to use a pipe to communicate between them.  
+> A pipe is seen as a file that can be written to by one process and read by the other.  
+
+This optimization is relevant for both single and multi-threaded solutions, so I will benchmark it in both cases on both systems:
+
+The single-threaded solution is not entirely "single-threaded" anymore because it uses 2 process, but even running both on a single logical core will have the same results(since the parent process is not doing anything), so I think it still counts.
+
+Laptop, single-threaded:
+```bash
+Time (mean ± σ):      6.012 s ±  0.061 s    [User: 0.001 s, System: 0.002 s]
+Range (min … max):    5.902 s …  6.073 s    10 runs
+```
+
+Laptop, 22 threads:
+```bash
+Time (mean ± σ):     704.3 ms ±   7.2 ms    [User: 0.5 ms, System: 1.8 ms]
+Range (min … max):   693.1 ms … 716.3 ms    10 runs
+```
+
+Server, single-threaded:
+```bash
+Time (mean ± σ):     10.604 s ±  0.025 s    [User: 0.000 s, System: 0.002 s]
+Range (min … max):   10.574 s … 10.657 s    10 runs
+```
+
+Server, 112 threads:
+```bash
+Time (mean ± σ):     175.0 ms ±   1.6 ms    [User: 0.4 ms, System: 1.6 ms]
+Range (min … max):   171.5 ms … 178.2 ms    50 runs
+```
+
+All of them lost 70-150ms, but in the multi-threaded cases that is a lot of time, especially on the server where almost half of the time disappeared!
+
 Now, after utilizing the many threads available on this CPU, I will try to utilize the new AVX512 instructions that are available on it.
 
 ## AVX512
+
+It is worth noting that because my cargo configuration is set to automatically compile for that existing CPU features, the compiler was already able to utilize AVX512 instructions where it saw fit without any more intervention from me. And as I'll show later, it did in at least one spot.
 
 The main improvement in AVX512 is the new 512 bit registers, that means every SIMD operation can potentially operate on twice as much data compared to the 256 bit registers in AVX2.  
 Unfortunately, these operations tend to be slower on some CPU models, so they often don't reach quite 2x the performance even with ideal data access.
@@ -445,8 +527,8 @@ fn add_measurement(
 
 Resulting in the following times(using 112 threads):
 ```bash
-Time (mean ± σ):     324.1 ms ±   1.7 ms    [User: 16745.7 ms, System: 1046.2 ms]
-Range (min … max):   320.5 ms … 327.8 ms    20 runs
+Time (mean ± σ):     178.5 ms ±   1.4 ms    [User: 0.5 ms, System: 1.6 ms]
+Range (min … max):   176.1 ms … 182.3 ms    50 runs
 ```
 
 Very slightly slower than before..
@@ -479,22 +561,89 @@ fn eq_inner(&self, other: &Self) -> bool {
 And that was slightly faster:
 
 ```bash
-Time (mean ± σ):     320.8 ms ±   3.0 ms    [User: 16379.9 ms, System: 1064.3 ms]
-Range (min … max):   317.1 ms … 334.1 ms    50 runs
+Time (mean ± σ):     172.9 ms ±   1.5 ms    [User: 0.6 ms, System: 1.4 ms]
+Range (min … max):   170.1 ms … 176.8 ms    50 runs
 ```
 
-I also tried using the masked load instructions available with AVX512 to only load relevant bytes, but that was slightly slower:
+I also tried using the masked load instructions available with AVX512 to only load relevant bytes:
+
+```rust
+let s = unsafe { _mm256_maskz_loadu_epi8(mask, self.ptr as *const i8) };
+let o = unsafe { _mm256_maskz_loadu_epi8(mask, other.ptr as *const i8) };
+```
+
+But that was slightly slower:
 
 ```bash
-Time (mean ± σ):     323.3 ms ±   2.7 ms    [User: 16583.0 ms, System: 1064.4 ms]
-Range (min … max):   320.2 ms … 333.5 ms    50 runs
+Time (mean ± σ):     176.0 ms ±   1.8 ms    [User: 0.5 ms, System: 1.7 ms]
+Range (min … max):   172.8 ms … 180.1 ms    50 runs
 ```
 
-I don't have other ideas how to utilise AVX512 here, so only a very small gain was made.
+I don't have other ideas how to utilise AVX512 here, so only a very small gain was made, and that is my final time for the challenge.
+
+To make it simpler to run, I combined both the AVX512 and the AVX2 multi-threaded solution into one file `final_multi_thread` that chooses the relevant code at compile time:
+```rust
+    #[cfg(all(target_feature = "avx512bw", target_feature = "avx512vl"))]
+    #[target_feature(enable = "avx512bw,avx512vl")]
+    fn eq_inner(&self, other: &Self) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+        let s = unsafe { _mm256_loadu_si256(self.ptr as *const __m256i) };
+        let o = unsafe { _mm256_loadu_si256(other.ptr as *const __m256i) };
+        let mask = (1 << self.len.max(other.len)) - 1;
+        let diff = _mm256_mask_cmpneq_epu8_mask(mask, s, o);
+        diff == 0
+    }
+    #[cfg(all(target_feature = "avx2", not(target_feature = "avx512bw")))]
+    #[target_feature(enable = "avx2")]
+    fn eq_inner(&self, other: &Self) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+        let s = unsafe { _mm256_loadu_si256(self.ptr as *const __m256i) };
+        let o = unsafe { _mm256_loadu_si256(other.ptr as *const __m256i) };
+        let mask = (1 << self.len) - 1;
+        let diff = _mm256_movemask_epi8(_mm256_cmpeq_epi8(s, o)) as u32;
+        diff & mask == mask
+    }
+    #[cfg(not(target_feature = "avx2"))]
+    fn eq_inner(&self, other: &Self) -> bool {
+        let self_slice = unsafe { from_raw_parts(self.ptr, self.len as usize) };
+        let other_slice = unsafe { from_raw_parts(other.ptr, other.len as usize) };
+        self_slice == other_slice
+    }
+
+```
+
+## Benchmarking A Compliant Multi-Threaded Solution
+
+Like in part 1, I wanted to measure the cost of being fully compliant with the rules. Which means supporting station names between 1 and 100 bytes.
+
+By combining the final multi-threaded solution and the exact same changes made in part 1 to make the final single-threaded solution compliant, I created a compliant multi-threaded solution.
+
+Running this version on the laptop with 22 threads:
+
+```bash
+Time (mean ± σ):     956.8 ms ±   8.3 ms    [User: 0.4 ms, System: 1.9 ms]
+Range (min … max):   945.6 ms … 970.8 ms    10 runs
+```
+
+And on the server with 122 threads:
+```bash
+Time (mean ± σ):     212.0 ms ±   2.3 ms    [User: 0.4 ms, System: 1.6 ms]
+Range (min … max):   209.7 ms … 221.4 ms    50 runs
+```
+
+36% and 22% slower than the non-compliant versions. But still pretty fast.
 
 ## Summary
 
-In this part of the one billion rows challenge, I used multithreading to make my already pretty fast single threaded solution even faster.  
-I demonstrated a few ways to achieve this, and as expected, the fastest way is the one that requires the least synchronization between the threads.  
-Then, when I ran out of software optimizations to apply, using better hardware was the next step.  
-By using a server equipped with 112 logical cores, I achieved a final time of 320.8 milliseconds, with almost half of the time being spent unmapping the memory mapped file at the end of the computation.
+In this part of the one billion rows challenge, I made my already pretty fast single threaded solution even faster:
+
+- I demonstrated a few ways to parallelize the work and use many threads, and as expected, the fastest way is the one that requires the least synchronization between the threads.  
+- When I ran out of software optimizations to apply, using better hardware was the next step. So another huge speedup was achieved by using a server equipped with 112 logical cores.  
+- I offloaded the file unmapping to a different process since it started taking a very significant amount of the time.
+- I used an AVX512 instruction available on the new system to shave off a couple more milliseconds.
+
+After all of this work, I achieved a final time of 172.9 milliseconds to solve the one billion rows challenge.
