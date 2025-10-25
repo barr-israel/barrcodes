@@ -1,11 +1,11 @@
 ---
 publishDate: 2025-11-01
-title: The One Billion Row Challange Part 1 - Single Threaded Solution From Minutes To Seconds
+title: The One Billion Row Challange Part 1 - Minutes To Seconds
 author: Barr
 keywords: [Rust, 1BRC, Performance, Optimization]
-description: Tackling the "The One Billion Row Challange" in Rust, and optimizing it for maximum performance. Part 1 will only focus on single threaded performance
+description: Tackling the "The One Billion Row Challange" in Rust, and optimizing it for maximum performance.
 summary: |
-  ["The One Billion Row Challenge"](https://github.com/gunnarmorling/1brc) is a programming challenge orignally written for Java, where the goal is to summarize a billion rows of temprature measurements as fast as possible. But since its invention, it has been solved in many other languages. In this blog post I will tackle the challenge myself and try to make my solution as fast as possible using Rust using a single thread, and in the next post I will use multiple threads to make it even faster.
+  ["The One Billion Row Challenge"](https://github.com/gunnarmorling/1brc) is a programming challenge orignally written for Java, where the goal is to summarize a billion rows of temprature measurements as fast as possible. But since its invention, it has been solved in many other languages. In this blog post I will tackle the challenge myself and try to make my solution as fast as possible using Rust using a single thread, and in the next post I will make it even faster using multiple threads and a couple more single-threaded optimizations I only applied after already parallizing it.
 github: https://github.com/barr-israel/1brc
 ---
 
@@ -627,6 +627,21 @@ Time (mean ± σ):     19.510 s ±  0.098 s    [User: 18.772 s, System: 0.412 s]
 Range (min … max):   19.386 s … 19.632 s    10 runs
 ```
 To keep things more interesting, I will be making the assumption that station names are between 3 and 26 bytes, as they are in the possible generated names.  
+
+### 2 Rule Sets
+
+At this point, I will separate the solution into 2 versions:
+
+#### Non-compliant Version
+
+It must work on any measurements file generated from the file generation code.  
+That means the possible station names are known, and they are all 3-27 bytes.  
+
+Unless stated otherwise(at the end of the post), this is the version I am optimizing for.
+
+#### Compliant Version
+
+It must meet the official rules, meaning there are up to 10000 different names, each between 1 and 100 bytes.
 
 ## Optimizing Line Splitting Again - 15.1 seconds
 
@@ -1394,11 +1409,9 @@ I experimented with other orders, and as far as I can tell, if and only if the `
 
 ## Benchmarking A Compliant Solution
 
-Earlier in the optimization stages, I use the assumption that station names are between 3 and 27 bytes.  
-That assumption is correct for all possible measurement files, but the challenge specifies solutions should support 1-100 bytes.  
-So just to compare how much supporting those lengths would cost in performance, I made a compliant version, it ***will not*** be used as a base for the multi-threaded solutions, or for the final single threaded performance benchmark.
+As mentioned before, the current solution is not compliant with the exact rules of the original challenge.
 
-The changes I made to support these lengths are mostly fallbacks which minimize the cost for the common path - names that are 3-27 bytes.  
+The changes I made to support the 1-100 byte lengths are mostly fallbacks which minimize the cost for the real common path - names that are 3-27 bytes.  
 To compare longer names I used the standard slice comparison when a given name is too long:
 ```rust
 fn eq_inner(&self, other: &Self) -> bool {
@@ -1416,21 +1429,16 @@ And to handle hashing names that are less than 3 bytes I mask bytes that are not
 fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     let ptr = self.ptr as *const u32;
     let sample = unsafe { ptr.read_unaligned() };
-    let mask = (1 << (self.len * 8 - 1).min(31)) - 1;
+    let mask = if self.len >= 4 {
+        !0
+    } else {
+        (1 << (self.len * 8 - 1)) - 1
+    };
     (sample & mask).hash(state)
 }
 ```
 
-Those two changes barely affect the run time of the solution:
-
-```bash
-Time (mean ± σ):      8.042 s ±  0.011 s    [User: 7.627 s, System: 0.392 s]
-Range (min … max):    8.020 s …  8.055 s    10 runs
-```
-
-Of course, given a measurements file that actually contains such long names, the new branch during comparison will no longer be perfectly predictable and might even make it slower than always using the standard slice comparison.
-
-The real performance issue with being more complaint appears in `read_line`: In order to find the length of the station name, I have to went back to `memchr` since the `;` is no longer guaranteed to be in the first 33 bytes of the line.  
+The biggest issue with being more complaint appears in `read_line`: In order to find the length of the station name, I switched back to `memchr` because the `;` is no longer guaranteed to be in the first 33 bytes of the line.  
 After `memchr` finds the end of the station name, I can still use a SIMD solution for the measurement, since those are always short enough, And this time I can even use 128 bit registers instead of 256.  
 So the new `read_line` looks like this:
 ```rust
@@ -1453,10 +1461,10 @@ fn read_line(mut text: &[u8]) -> (&[u8], StationName, i32) {
 }
 ```
 
-And this time a lot of performance was lost:
+And a lot of performance was lost:
 ```bash
-Time (mean ± σ):     12.864 s ±  0.041 s    [User: 12.436 s, System: 0.403 s]
-Range (min … max):   12.822 s … 12.914 s    10 runs
+Time (mean ± σ):     12.134 s ±  0.018 s    [User: 11.705 s, System: 0.403 s]
+Range (min … max):   12.114 s … 12.165 s    10 runs
 ```
 
 Inspecting the way `memchr` looks for a byte, I saw that it reads 4 chunks of 256 bits every time, which helps eliminate some overhead when the byte is not close to the start of the slice.  
@@ -1466,11 +1474,11 @@ But since in this case it is always near the start, I thought that a simple loop
 (station_name_slice, text) = loop {
     let line_remainder: __m256i =
         unsafe { _mm256_loadu_si256(text.as_ptr() as *const __m256i) };
-    let seperator_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(seperator, line_remainder));
-    if seperator_mask == 0 {
+    let separator_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(separator, line_remainder));
+    if separator_mask == 0 {
         text = &text[32..];
     } else {
-        break text.split_at(seperator_mask.trailing_zeros() as usize);
+        break text.split_at(separator_mask.trailing_zeros() as usize);
     }
 };
 ```
@@ -1478,25 +1486,25 @@ But since in this case it is always near the start, I thought that a simple loop
 But it ended up being slower:
 
 ```bash
-Time (mean ± σ):     13.635 s ±  0.017 s    [User: 13.045 s, System: 0.406 s]
-Range (min … max):   13.619 s … 13.664 s    10 runs
+Time (mean ± σ):     12.762 s ±  0.013 s    [User: 12.340 s, System: 0.396 s]
+Range (min … max):   12.746 s … 12.785 s    10 runs
 ```
 
 Finally, I reused the already loaded vector for the `\n` search *if* the `;` was found early enough within the vector: if the `;` is within the first 27 bytes, the `\n` must also be within the vector. Otherwise, it could potentially be outside the vector, so a new load must be done from that address:  
 
 ```rust
-let seperator: __m256i = _mm256_set1_epi8(b';' as i8);
+let separator: __m256i = _mm256_set1_epi8(b';' as i8);
 let line_break: __m256i = _mm256_set1_epi8(b'\n' as i8);
 let mut len = 0usize;
 loop {
     let line_remainder: __m256i =
         unsafe { _mm256_loadu_si256(text.as_ptr().add(len) as *const __m256i) };
-    let seperator_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(seperator, line_remainder));
-    if seperator_mask == 0 {
+    let separator_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(separator, line_remainder));
+    if separator_mask == 0 {
         len += 32;
     } else {
-        let seperator_pos = seperator_mask.trailing_zeros() as usize;
-        if seperator_pos > 27 {
+        let separator_pos = separator_mask.trailing_zeros() as usize;
+        if separator_pos > 27 {
             // line break potentially outside vector
             unsafe { _mm256_loadu_si256(text.as_ptr().add(len) as *const __m256i) };
         }
@@ -1508,9 +1516,9 @@ loop {
             &search_end_ptr[line_break_pos + 1..],
             StationName {
                 ptr: text.as_ptr(),
-                len: len as u8 + seperator_pos as u8,
+                len: len as u8 + separator_pos as u8,
             },
-            parse_measurement(&search_end_ptr[seperator_pos + 1..line_break_pos]),
+            parse_measurement(&search_end_ptr[separator_pos + 1..line_break_pos]),
         );
     }
 }
@@ -1518,8 +1526,8 @@ loop {
 
 This improved the performance significantly, shrinking most of the gap between the compliant and the non-compliant version, but still significantly slower:
 ```bash
-Time (mean ± σ):      9.508 s ±  0.038 s    [User: 9.095 s, System: 0.394 s]
-Range (min … max):    9.470 s …  9.577 s    10 runs
+Time (mean ± σ):      8.882 s ±  0.023 s    [User: 8.458 s, System: 0.400 s]
+Range (min … max):    8.861 s …  8.936 s    10 runs
 ```
 
 And now, back to the non-compliant version.
@@ -1546,7 +1554,7 @@ The only difference I found in the generated instructions is the removed bounds 
 For now I'm leaving it as is for maximum performance.
 If anyone can figure out what causes this regression I would appreciate an explanation.  
 
-## Final Single Threaded Results - 6.12 seconds
+## Final Results For Part 1 - 6.12 seconds
 
 In this very long post I have improved my solution for the one billion row challenge from over a minute to under 10 seconds, using a lot of different optimization methods.  
 To end this part of the challenge, I will run the benchmark again, without the CPU locked to a stable 3.5GHz to get it even faster:
@@ -1554,6 +1562,12 @@ To end this part of the challenge, I will run the benchmark again, without the C
 Time (mean ± σ):      6.174 s ±  0.021 s    [User: 5.864 s, System: 0.297 s]
 Range (min … max):    6.143 s …  6.204 s    10 runs
 ```
-And the final flamegraph for the solution looks like [this](flamegraph_final.svg)
+The final flamegraph for the solution looks like [this](flamegraph_final.svg)
 
-In my next post I will improve the performance further by utilizing multiple threads and experimenting with making the performance of each thread better on a CPU that supports AVX512.
+And the compliant version:
+```bash
+Time (mean ± σ):      6.744 s ±  0.083 s    [User: 6.408 s, System: 0.310 s]
+Range (min … max):    6.581 s …  6.823 s    10 run
+```
+
+I planned on making this part about all the single threaded optimizations and the next part about all the multi-threaded optimizations, but this post is already very long, so there will be some of both in the next part, and also benchmarking using a much more powerful system.

@@ -197,7 +197,6 @@ And as expected, this solution works much better(these *were* measured with `hyp
 | Time (s) | 8.02 | 4.06  | 2.12 | 1.46 | 1.44 | 1.25 | 1.10 | 1.01 | 0.96 | 0.89 | 0.86 | 0.88 |
 
 And we finally crossed the 1 second barrier!  
-I considered rewriting the `merge_summaries` function to reuse the same hash instead of computing every hash twice, but the entire function does not even register on the profile, so there is no reason to do it.
 
 Looking at the run times we got, we can see that the performance is equal to the single threaded performance with 1 thread, which means no overhead was added.  
 Additionally, the performance scaled almost perfectly up to 6 threads and then the scaling started to slow down. This matches with the fact that this laptop has exactly 6 performance cores.
@@ -257,9 +256,9 @@ And now, benchmarking it again(still with unlocked frequencies):
 It appears that there is a small overhead added, which slightly slows down the program with 1 or 2 threads.  
 With 8 or more threads is when the gains from having a higher granularity appear, as all of the results are faster than before.
 
-So the final run time on this system by utilizing multithreading is 0.77 seconds.
+I am not going to bother with locking the frequencies in any of the future benchmarks.
 
-This is as far as I go on *this* system, but I now have access to a more powerful system to experiment with.
+I now have access to a more powerful system to experiment with, so lets try it.
 
 ## Better Hardware For Better Performance
 
@@ -581,7 +580,7 @@ Range (min … max):   172.8 ms … 180.1 ms    50 runs
 
 I don't have other ideas how to utilise AVX512 here, so only a very small gain was made, and that is my final time for the challenge.
 
-To make it simpler to run, I combined both the AVX512 and the AVX2 multi-threaded solution into one file `final_multi_thread` that chooses the relevant code at compile time:
+To make it simpler to run, I combined both the AVX512 and the AVX2 multi-threaded solution into one file `combined_multi_thread` that chooses the relevant code at compile time:
 ```rust
     #[cfg(all(target_feature = "avx512bw", target_feature = "avx512vl"))]
     #[target_feature(enable = "avx512bw,avx512vl")]
@@ -613,20 +612,377 @@ To make it simpler to run, I combined both the AVX512 and the AVX2 multi-threade
         let other_slice = unsafe { from_raw_parts(other.ptr, other.len as usize) };
         self_slice == other_slice
     }
+```
+
+## A Custom Hash Map
+
+Until now I relied on the standard library's implementation for the hash map(even when using other hash map crates, they only provided a different hashing function).  
+Looking at a [flamegraph](flamegraph1.svg) of running a single thread shows that half of the time is spent in the hash map, and the only parts of it I improved so far was the hashing and comparison.  
+The standard hash map is a general implementation that doesn't know anything about the expected maximum size, load, collisions, the default state we would want entries at, and that we do not intend to remove any items.  
+By using this knowledge, we can create a simple hash map that is purpose built for *this* case.  
+
+So what can we do with the knowledge we have?
+
+- The challenge specifies at most 10,000 different station names, so we can allocate at least that size and never have to worry about running out of space.  
+  The load can get high if we completely refuse to reallocate and get that many different station names, but in reality there are only 413 names so its okay.  
+- Because we expect the common case to have little to no conflicts and to already be in the hash map, we don't need a complicated system that loads multiple tags and checks them like the standard implementation does.  
+- To make computing the index from the hash faster, we should allocate a size with a power of 2, so at least 16K(2 to the power of 14).  
+- It would be easier if all entries start from some default state of "no measurements" instead of branching on whether there is a state or not(but checking if the cell is "claimed" by a certain station name is still needed).  
+- We will never delete items from the hash map, eliminating any need for mechanisms that handle it like gravestones or moving entries around to fill empty spots.
+
+Using these, I created this simple hash map, that also incorporates updating measurements into its methods:
+
+```rust
+// my_hashmap.rs
+pub struct MyHashMap {
+    names: Box<[StationName; SIZE]>,
+    entries: Box<[StationEntry; SIZE]>,
+}
+```
+The names and entries are stored separately, measured to be considerably faster than storing them together.
+
+```rust
+impl MyHashMap {
+    pub fn new() -> MyHashMap {
+        let mut names;
+        let mut entries;
+        unsafe {
+            names = Box::<[MaybeUninit<StationName>; SIZE]>::new_uninit().assume_init();
+            entries = Box::<[MaybeUninit<StationEntry>; SIZE]>::new_uninit().assume_init();
+        }
+        for name in names.iter_mut() {
+            name.write(StationName {
+                ptr: null(),
+                len: 0,
+            });
+        }
+        for entry in entries.iter_mut() {
+            entry.write(StationEntry {
+                min: 1000,
+                max: -1000,
+                sum: 0,
+                count: 0,
+            });
+        }
+        MyHashMap {
+            names: unsafe {
+                transmute::<Box<[MaybeUninit<StationName>; SIZE]>, Box<[StationName; SIZE]>>(names)
+            },
+            entries: unsafe {
+                transmute::<Box<[MaybeUninit<StationEntry>; SIZE]>, Box<[StationEntry; SIZE]>>(
+                    entries,
+                )
+            },
+        }
+    }
+```
+The creation of the hash map is so complicated because `Box::new(from_fn(|| StationName{ptr:null(),len:0}))` creates the array on the stack and *then* copies it into the heap, causing a stack overflow.
+
+```rust
+    pub fn insert_measurement(&mut self, name: StationName, measurement: i32) {
+        let mut hasher = FxHasher::default();
+        name.hash(&mut hasher);
+        let mut hash = hasher.finish() as usize;
+        let entry = unsafe {
+            loop {
+                let index = hash & MASK;
+                let potential_name = self.names.get_unchecked_mut(index & MASK);
+                if potential_name.ptr.is_null() {
+                    *potential_name = name;
+                    break self.entries.get_unchecked_mut(index);
+                }
+                if *potential_name == name {
+                    break self.entries.get_unchecked_mut(index);
+                }
+                hash = hash.wrapping_add(1);
+            }
+        };
+        entry.sum += measurement;
+        entry.count += 1;
+        if measurement > entry.max {
+            entry.max = measurement;
+        }
+        if measurement < entry.min {
+            entry.min = measurement;
+        }
+    }
+    pub fn merge_entry(&mut self, name: &StationName, other_entry: &StationEntry) {
+        let mut hasher = FxHasher::default();
+        name.hash(&mut hasher);
+        let mut hash = hasher.finish() as usize;
+        let entry = unsafe {
+            loop {
+                let index = hash & MASK;
+                let potential_name = self.names.get_unchecked_mut(index & MASK);
+                if potential_name.ptr.is_null() {
+                    *potential_name = *name;
+                    break self.entries.get_unchecked_mut(index);
+                }
+                if *potential_name == *name {
+                    break self.entries.get_unchecked_mut(index);
+                }
+                hash = hash.wrapping_add(1);
+            }
+        };
+        entry.sum += other_entry.sum;
+        entry.count += other_entry.count;
+        entry.max = entry.max.max(other_entry.max);
+        entry.min = entry.min.min(other_entry.min);
+    }
+```
+Both of these are for ease of use with our specific use case of the hash map.
+
+```rust
+    pub fn iter(&self) -> impl Iterator<Item = (&StationName, &StationEntry)> {
+        self.names
+            .iter()
+            .zip(self.entries.iter())
+            .filter(|(name, _)| !name.ptr.is_null())
+    }
+}
+```
+Simple iteration for the conversion and output at the end.
+
+I also moved the `StationName` and `StationEntry` into the same file.
+
+Rerunning the 4 benchmarks:
+
+Laptop, single-threaded:
+```bash
+Time (mean ± σ):      5.724 s ±  0.067 s    [User: 0.001 s, System: 0.002 s]
+Range (min … max):    5.628 s …  5.807 s    10 runs
+```
+
+Laptop, 22 threads:
+```bash
+Time (mean ± σ):     641.1 ms ±   6.4 ms    [User: 0.9 ms, System: 1.5 ms]
+Range (min … max):   634.0 ms … 654.4 ms    10 runs
+```
+
+Server, single-threaded:
+```bash
+Time (mean ± σ):     10.100 s ±  0.011 s    [User: 0.001 s, System: 0.002 s]
+Range (min … max):   10.090 s … 10.120 s    10 runs
+```
+
+Server, 112 threads:
+```bash
+Time (mean ± σ):     164.5 ms ±   3.3 ms    [User: 0.5 ms, System: 1.7 ms]
+Range (min … max):   158.0 ms … 172.5 ms    50 runs
+```
+
+A little faster in all of them.
+
+## A Perfect Hash Function
+
+A Perfect Hash Function is a hash function that guarantees there are no collisions, that means that it will give a unique index for every key.  
+When the key space is very large(like in the compliant rules), it is not feasible to find a perfect hash function.  
+But when it is small enough, we can find it via brute force.  
+
+So what are the properties of the key space?
+
+- 413 keys, a pretty small space.
+- The keys are byte slices mostly composed of ASCII letters(there are a few Unicode ones)
+- The most problematic pair of keys similarity wise is `Alexandria` and `Alexandra`, which are identical for the first 8 bytes.
+
+The current hash function only considers the first 4 bytes, so even before the modulus part of the function that maps the full `u64` hash to an index, the problematic pair already has the same `u64` hash.  
+To fix this issue, I will instead consider the 2nd to 9th bytes, as there are no full equality pairs like that in those bytes.  
+
+Next, to find the perfect hash function, I wrote a few variations of it and ran them through this brute force search function:
+```rust
+pub fn find_seed() {
+    const OFFSET: usize = 1;
+    for log_size in 9..22 {
+        println!("testing size {log_size}");
+        let vec_mask: usize = (1 << (log_size)) - 1;
+        (0..22).into_par_iter().for_each(|tid| {
+            let mut vec = vec![false; 1 << (log_size)];
+            for seed in (tid..1_000_000).step_by(22) {
+                let mut found = true;
+                for name in STATION_NAMES.iter() {
+                    let ptr = unsafe { name.as_ptr().add(OFFSET) } as *const u64;
+                    let sample = unsafe { ptr.read_unaligned() };
+                    let len_mask = if name.len() > 8 + OFFSET {
+                        !0
+                    } else {
+                        (1 << ((name.len() - OFFSET) * 8 - OFFSET)) - 1
+                    };
+                    let mut hasher = FxHasher::with_seed(seed);
+                    masked_sample.hash(&mut hasher);
+                    let hash = hasher.finish() as usize;
+                    let vec_index = hash % vec_mask;
+                    if !vec[vec_index] {
+                        vec[vec_index] = true;
+                    } else {
+                        vec.fill(false);
+                        found = false;
+                        break;
+                    }
+                }
+                if found {
+                    println!("Seed Found: {seed}");
+                    unsafe { libc::exit(0) };
+                }
+            }
+        });
+    }
+    println!("Failed");
+}
+```
+
+Running this I found the successful seed 78 with `log_size` at 15, which means the hash map must have 32K slots for this to work.
+
+I also found 2 other methods:
+
+The first packs the 5 bits that are relevant in ASCII letters, which needs a `log_size` of 17:
+```rust
+let hash = unsafe {
+    _pext_u64(
+        masked_sample,
+        0b00011111_00011111_00011111_00011111_00011111_00011111_00011111_00011111,
+    ) as usize
+};
+```
+And the second is the simple identity function:
+```rust
+let hash = masked_sample as usize;
+```
+
+Adding the seed to the `pext` or to the identity function literally has no effect on the collisions since they shift all collisions together, so instead I tried searching for a better divisor(the size is no longer a search parameter because it is equal to divisor):
+
+For the identity function, `divisor=13779` works.  
+For `pext`, `divisor=13167` works.  
+
+Since changing the divisor helped so much, I added another loop to the original `FxHasher` search that tries different divisors:
+```rust
+for divisor in 413..(1 << 15) {
+    (0..22).into_par_iter().for_each(|tid| {
+        let mut vec = vec![false; 1 << 15];
+            for seed in (tid..10000).step_by(22) {
+          ...
+```
+
+This search found `divisor=7088, seed=1339`.
+
+Initially I hoped to be able to find a function that uses a power of 2 divisor, which would be a lot faster. But none of my searches found one that works.  
+Fortunately, modulus by a constant is optimized into a multiplication, so it is still pretty fast.
+
+To pick between these a benchmark of each is required. That is because both the time to compute the index and the size of the table may have an effect.  
+A larger table takes more memory, which means it will be harder to fit in cache and take more time to bring from memory to the cache.  
+Fortunately, we never actually need the entire table, at most we will need 413 entries from it, which means 413 cache lines(64 bytes) from each of the arrays in the hash map.  
+That many lines probably do fit in the cache, but we would also like to fit other things, so a more compact table that contains more than one relevant entry per cache line might help.
+
+I expect the identity function to win this benchmark, since the sizes are relatively close to each other.
+
+But first to write the new hash map:
+
+### Updating The Hash Map:
+
+Because all of the keys and their index are known ahead of time now(and we can access them freely in the `STATION_NAMES` array), we can completely remove the `names` array from the hash map. Already halving its size.  
+
+That also means we don't need the `StationName` struct at all anymore.
+
+The `insert_measurement` function no longer loops, because there will never be a collision(and there is no way to check if there is one anyway without the `names` array):
+```rust
+// my_phf.rs
+pub fn insert_measurement(&mut self, name: &[u8], measurement: i32) {
+    let index = get_name_index(name);
+    let entry = unsafe { self.entries.get_unchecked_mut(index) };
+    entry.sum += measurement;
+    entry.count += 1;
+    if measurement > entry.max {
+        entry.max = measurement;
+    }
+    if measurement < entry.min {
+        entry.min = measurement;
+    }
+}
+```
+`get_name_index` is the new hash function that need to be picked.
+
+I replaced the `merge_entry` function with a function that merges 2 whole maps.  
+Because the index belonging to each name is always the same, we can simply merge them using a simple scan over the arrays:
+```rust
+// my_phf.rs
+pub fn merge_maps(&mut self, other_map: Self) {
+    for (entry, other_entry) in self.entries.iter_mut().zip(other_map.entries.iter()) {
+        if (entry.count != 0) | (other_entry.count != 0) {
+            entry.sum += other_entry.sum;
+            entry.count += other_entry.count;
+            entry.max = entry.max.max(other_entry.max);
+            entry.min = entry.min.min(other_entry.min);
+        }
+    }
+}
+```
+
+To make things simpler, I also moved the result printing into the map:
+```rust
+// my_phf.rs
+pub fn print_results(self) {
+let mut out = std::io::stdout().lock();
+let _ = out.write_all(b"{");
+for station_name in STATION_NAMES[..STATION_NAMES.len() - 1].iter() {
+    let name = unsafe { std::str::from_utf8_unchecked(station_name) };
+    let index = get_name_index(station_name);
+    let entry = unsafe { self.entries.get_unchecked(index) };
+    if entry.count != 0 {
+        let (min, avg, max) = entry.get_result();
+        let _ = out.write_fmt(format_args!("{name}={min:.1}/{avg:.1}/{max:.1}, "));
+    }
+}
+let station_name = STATION_NAMES[STATION_NAMES.len() - 1];
+let name = unsafe { std::str::from_utf8_unchecked(station_name) };
+let index = get_name_index(station_name);
+let entry = unsafe { self.entries.get_unchecked(index) };
+if entry.count != 0 {
+    let (min, avg, max) = entry.get_result();
+    let _ = out.write_fmt(format_args!("{name}={min:.1}/{avg:.1}/{max:.1}}}"));
+}
+_ = out.flush();
+}
+```
+This prints in the right order because I already sorted the names in the constant `STATION_NAMES` array.
+
+
+I'm using the new map in `use_phf.rs`
+
+### Picking A Perfect Hash Function
+
+By running each of the 3 options on the server with 112 threads we can pick the best one:
+
+Identity function:
+```bash
+Time (mean ± σ):     154.8 ms ±   4.6 ms    [User: 0.4 ms, System: 1.7 ms]
+Range (min … max):   145.3 ms … 163.3 ms    50 runs
+```
+
+`pext`:
+```bash
+Time (mean ± σ):     156.3 ms ±   4.6 ms    [User: 0.5 ms, System: 1.7 ms]
+Range (min … max):   145.8 ms … 165.1 ms    50 runs
+```
+
+And with `FxHasher`:
+```bash
+Time (mean ± σ):     153.7 ms ±   4.2 ms    [User: 0.5 ms, System: 1.7 ms]
+Range (min … max):   144.2 ms … 160.6 ms    50 runs
 
 ```
+All three are measurable faster than before, but pretty much equal to each other.  
+I tried running the search for `FxHasher` with more seeds to find a lower divisor but could not find anything.  
+Since the `FxHasher` table is smaller, I'll pick it.
 
 ## Benchmarking A Compliant Multi-Threaded Solution
 
-Like in part 1, I wanted to measure the cost of being fully compliant with the rules. Which means supporting station names between 1 and 100 bytes.
+Like in part 1, I wanted to measure the cost of being fully compliant with the rules. Which means supporting 10000 different station names between 1 and 100 bytes.
 
-By combining the final multi-threaded solution and the exact same changes made in part 1 to make the final single-threaded solution compliant, I created a compliant multi-threaded solution.
+By combining the final multi-threaded solution without the PHF(because its whole point was to utilise the name assumptions) and the exact same changes made in part 1 to make the final single-threaded solution compliant, I created a compliant multi-threaded solution.
 
 Running this version on the laptop with 22 threads:
 
 ```bash
-Time (mean ± σ):     956.8 ms ±   8.3 ms    [User: 0.4 ms, System: 1.9 ms]
-Range (min … max):   945.6 ms … 970.8 ms    10 runs
+Time (mean ± σ):     956.8 ms ±   8.3 ms    [User: 0.4 ms, System: 1.9 ms]Range (min … max):   945.6 ms … 970.8 ms    10 runs
 ```
 
 And on the server with 122 threads:
@@ -635,15 +991,15 @@ Time (mean ± σ):     212.0 ms ±   2.3 ms    [User: 0.4 ms, System: 1.6 ms]
 Range (min … max):   209.7 ms … 221.4 ms    50 runs
 ```
 
-36% and 22% slower than the non-compliant versions. But still pretty fast.
-
 ## Summary
 
 In this part of the one billion rows challenge, I made my already pretty fast single threaded solution even faster:
 
 - I demonstrated a few ways to parallelize the work and use many threads, and as expected, the fastest way is the one that requires the least synchronization between the threads.  
-- When I ran out of software optimizations to apply, using better hardware was the next step. So another huge speedup was achieved by using a server equipped with 112 logical cores.  
+- I started benchmarking on a server with far more cores than before.
 - I offloaded the file unmapping to a different process since it started taking a very significant amount of the time.
 - I used an AVX512 instruction available on the new system to shave off a couple more milliseconds.
+- I wrote a new hash map designed specifically for this use case.
+- I found a perfect hash function to make the hash map even faster.
 
-After all of this work, I achieved a final time of 172.9 milliseconds to solve the one billion rows challenge.
+After all of this work, I achieved a final time of 153.7 milliseconds to solve the one billion rows challenge.
