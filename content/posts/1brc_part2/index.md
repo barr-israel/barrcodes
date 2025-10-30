@@ -969,9 +969,9 @@ Time (mean ± σ):     153.7 ms ±   4.2 ms    [User: 0.5 ms, System: 1.7 ms]
 Range (min … max):   144.2 ms … 160.6 ms    50 runs
 
 ```
-All three are measurable faster than before, but pretty much equal to each other.  
+All three are measurably faster than before, but pretty much equal to each other(no statistically significant difference).  
 I tried running the search for `FxHasher` with more seeds to find a lower divisor but could not find anything.  
-Since the `FxHasher` table is smaller, I'll pick it.
+Since we expect to only load up to 413 cache lines around the 413 station names and having 2 entries on the same line is fairly unlikely, the actual size of the table doesn't matter. So I picked the identity function
 
 ## Benchmarking A Compliant Multi-Threaded Solution
 
@@ -990,6 +990,13 @@ And on the server with 122 threads:
 Time (mean ± σ):     212.0 ms ±   2.3 ms    [User: 0.4 ms, System: 1.6 ms]
 Range (min … max):   209.7 ms … 221.4 ms    50 runs
 ```
+
+## Failed Optimization
+
+Like in the previous part, some of my attempts to improve the performance did not succeed:
+
+- Pinning the threads to cores only caused performance to decrease significantly.
+- I tried to incorporate prefetching into the code by prefetching the lookup table and the hash table indexes in one iteration and actually accessing them in the next iteration, but despite reducing the L1 miss rate from 11% to 0.7%, the run time and the `tma_l1_bound` metric did not measurably improve.
 
 ## Summary
 

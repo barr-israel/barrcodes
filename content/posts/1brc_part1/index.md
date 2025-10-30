@@ -1032,12 +1032,17 @@ Alternatively, multiplying by a boolean cast to a number often achieves a simila
 let bonus = 10-(5*(team==TEAM::BLUE as i32));
 ```
 
+ #### Rust's Branch-less Hint
+
+In addition to these, the Rust standard library has the `std::hint::select_unpredictable` [function](https://doc.rust-lang.org/stable/std/hint/fn.select_unpredictable.html), which is functionally identical to the `if b { val1 } else { val2}` format I showed, but it is supposed to be more reliable at generating conditional moves than writing it manually.
+
 ### The Downsides Of Branch-less Code
 
-Code that was optimized to be branch-less usually has 2 downsides compared to normal branches:
+Code that was optimized to be branch-less usually has 3 downsides compared to normal branches:
 
 - The possible computations done without branches is limited in comparison.
 - Branch-less operations create an additional data dependency chain in the CPU, compared to branches.
+- If the branch is often predicted correctly by the CPU's branch predictor, the branching version will likely be faster.
 
 Data dependencies are a complicated topic that in this case they boil down to the following example:  
 Consider the following code:
