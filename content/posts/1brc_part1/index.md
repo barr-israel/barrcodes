@@ -464,11 +464,11 @@ I also tried `nohash-hasher::NoHashHasher` which does not actually do any hashin
 
 So I'll continue with `FxHashMap`.
 
-## Mapping Is Faster Than Reading - 27.7 seconds
+## Mapping Is Faster Than Reading(In This Case) - 27.7 seconds
 
 Up until now I relied on `BufReader` to get the data from the file, one common alternative way to read data from a file is using `mmap`.  
 `mmap` is a system call that maps a file into memory, making it appear to the program as a big array that can be read directly, it can even map files much larger than the system memory can contain.  
-Of course, the file is not actually copied into system memory until it is actually touched, but that part is handled by the operating system.
+Of course, the file is not copied into system memory until it is needed, but that part is handled by the operating system during page faults.
 To use `mmap` in Rust, you can use a crate such as `memmap` or its replacement, `mememap2`, or you can the call `mmap` system call directly via the `libc` crate, like `memmap` and `memmap2` do:
 
 ```rust
@@ -534,13 +534,14 @@ The updated [flamegraph](flamegraph4.svg) shows 2 things:
 - Reading the file disappeared completely from the flamegraph
 - `position` is becoming a considerable bottleneck again(especially now that we are using it twice)
 
-The reason we can't see the reading itself at all is also part of the reason `position` takes such a long time now: there is dedicated section of code for getting the bytes from the file into the program, it is done entirely during page faults, which are attributed to the assembly instructions that cause the faults.  
+The reason we can't see the reading itself at all is also part of the reason `position` takes such a long time now: there is no dedicated section of code for getting the bytes from the file into the program, it is done entirely during page faults, which are attributed to the assembly instructions that cause the faults.  
 These instructions would mostly be inside `position`, since it is the first to touch any line of text.
 
 > [!Note] Page Faults
 > As I explained before, `mmap` does not actually copy the entire file into memory, it just makes it appear to be in memory.  
-> When the program tries to access a part of the file, the CPU detects that the memory page(a small section of memory, 4KiB unless using huge pages) containing the accessed address is not actually in memory, and causes a page fault.  
-> The page fault is handled by the operating system, which copies the missing page from the file into memory, and then control can be given back to the program, which will read the value as if nothing happened.
+> When the program tries to access a part of the file, the CPU detects that the memory page(a small section of memory, 4KiB unless using huge pages) containing the accessed address is not mapped for the process, and causes a page fault, which pauses the program and transfers control to the OS to handle it.  
+> The page fault is handled by the operating system, which copies the missing page from the file into memory if it is not already in the page cache, points the process' page table at the page that was just read(or was already in the page cache), and then control can be given back to the program, which will read the value as if nothing happened.
+> In this case, the file is always in the page cache because of a previous warm-up run when the performance is measured. Measuring the performance with a cold cache shows a significant increase in run time.
 
 ## memchr - 26.1 seconds
 
