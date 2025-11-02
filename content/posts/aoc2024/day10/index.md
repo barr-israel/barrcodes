@@ -5,7 +5,7 @@ author: Barr
 keywords: [Advent of Code, Rust]
 description: The first pathfinding day.
 summary: |
-  Today's challange is a simple pathfinding one: find trails in increasing heights on a topological map.
+  Today's challenge is a simple pathfinding one: find trails in increasing heights on a topological map.
 github: https://github.com/barr-israel/aoc2024/blob/main/src/day10.rs
 ---
 ## Input

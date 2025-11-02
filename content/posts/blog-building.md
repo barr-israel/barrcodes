@@ -221,7 +221,7 @@ Finally, I need to actually host this website somewhere, I decided to go with [C
 There is not much to talk about that isn't in their getting started documentation, I connected the GitHub repository and now every push to the preview or production branches and Cloudflare automatically redeploys the website(which only includes cloning it and distributing it over their network, since this is a static website).  
 
 ## Unexplained Behaviour
-A surprising behavior I found while finalizing the website design, is that if I have an active Zoom call in another tab, having my `onhover` listener adds a significant delay before the following click can load the page.  
+A surprising behaviour I found while finalizing the website design, is that if I have an active Zoom call in another tab, having my `onhover` listener adds a significant delay before the following click can load the page.  
 Disabling the `onhover` listener or clicking a link without hovering first(i.e using the keyboard) still fetches and displays the document quickly.  
 This behaviour goes back to normal the moment the call ends.--
 I can find absolutely no explanation for this behaviour.

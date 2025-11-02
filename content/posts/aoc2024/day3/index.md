@@ -5,7 +5,7 @@ author: Barr
 keywords: [Advent of Code, Rust]
 description: Parsing some basic instructions
 summary: |
-  Today's challange involves parsing and executing math instructions, surrounded by a lot of garbage data.
+  Today's challenge involves parsing and executing math instructions, surrounded by a lot of garbage data.
 github: https://github.com/barr-israel/aoc2024/blob/main/src/day3.rs
 ---
 

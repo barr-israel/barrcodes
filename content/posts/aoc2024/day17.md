@@ -18,7 +18,7 @@ Register C: 0
 Program: 0,1,5,4,3,0
 ```
 Each instruction is a pair of an opcode followed by an operand.  
-The exact behavior of each instruction is given in detail in the [problem description](https://adventofcode.com/2024/day/17).  
+The exact behaviour of each instruction is given in detail in the [problem description](https://adventofcode.com/2024/day/17).  
 The 2 notable instructions are the conditional jump(opcode 3), and the print(opcode 5)
 
 ## Part 1

@@ -4,7 +4,7 @@ title: Exploding Pokemon As Fast As Possible
 author: Barr
 keywords: [Rust, CUDA, Pokemon, Random Number Generation]
 description: Answering ShoddyCast's challenge by simulating 1 billion battles in less than a second using Rust, and later, less than 10ms using CUDA.
-summary: In this post I will answer [ShoddyCast](https://www.youtube.com/@ShoddyCast)'s challange and simulate Pokemon battles looking for an extremely rare sequence of results that can save a theoretical game save from a softlock using Rust, and later, also CUDA.
+summary: In this post I will answer [ShoddyCast](https://www.youtube.com/@ShoddyCast)'s challenge and simulate Pokemon battles looking for an extremely rare sequence of results that can save a theoretical game save from a softlock using Rust, and later, also CUDA.
 github: https://github.com/barr-israel/graveler-sim
 ---
 ## Background
@@ -64,7 +64,7 @@ Now how do I use these to make the code faster?
 The naive roll simply generated a `u32`, and checked for the remainder when divided by 4, usually remainder and division are slow but for power of 2 they are optimized to bitwise operations, in this case, `x % 4` optimizes to `x & 3`, meaning "keep only the last 2 bits".  
 Which means, I am rolling 32 bits, using the last 2, and throwing away the other 30, not very efficient.
 
-To utilise bitwise operations for this problem, it is useful to notice 1 statistical property:  
+To utilize bitwise operations for this problem, it is useful to notice 1 statistical property:  
 Rolling 2 numbers between 0 and 1 twice and returning 1 if both are 0, has the same statistical distribution as rolling a number between 0 and 3 and returning 1 if it is 0(both represent a Bernoulli trial with a chance of 0.25).  
 So if I had 2 random bits, I can apply AND between them, and get 0 25% of the time, simulating a single turn.  
 Next, if I have a pair of 231 bit numbers, I can apply AND between them, and get the result of 231 turns at once.  
@@ -147,7 +147,7 @@ So comparing the old solution with these changes using hyperfine, the results ar
 The random number generation took a significant amount of the time before, and there is a massive improvement from using a faster implementation.
 
 ## SIMD Is Fast
-Modern CPUs have access to SIMD(Single Instruction Multiple Data) instructions, that can operate on multiple numbers at the same time with a single instruction, and fortunately, the `simd_rand` crate has implementations for various PRNG algorithms that utilise these instructions.  
+Modern CPUs have access to SIMD(Single Instruction Multiple Data) instructions, that can operate on multiple numbers at the same time with a single instruction, and fortunately, the `simd_rand` crate has implementations for various PRNG algorithms that utilize these instructions.  
 For the highest performance, while ignoring minor statistical downsides, I picked the [xorshiro256plus](https://prng.di.unimi.it/) algorithm.  
 The new roll function looks like this:
 ```rust
@@ -158,7 +158,7 @@ fn roll(rng: &mut Xoshiro256PlusX4) -> u32 { // Xoshiro256PlusX4 is the state st
     res[0].count_ones() + res[1].count_ones() + res[2].count_ones() + (res[3] & MASK).count_ones()
 }
 ```
-When starting to use code that utilises SIMD, it is important to have the required instructions available to the compiler, meaning having the right target-cpu/target-feature set, which is another reason to only measure the performance using the same settings as `both` from the last section.  
+When starting to use code that utilizes SIMD, it is important to have the required instructions available to the compiler, meaning having the right target-cpu/target-feature set, which is another reason to only measure the performance using the same settings as `both` from the last section.  
 With the new crate, `hyperfine` reports a time of **3.119s**, another massive leap in performance.
 
 ### Even Bigger SIMDs

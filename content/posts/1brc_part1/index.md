@@ -1,11 +1,11 @@
 ---
 publishDate: 2025-11-01
-title: The One Billion Row Challange Part 1 - Minutes To Seconds
+title: The One Billion Row Challenge Part 1 - Minutes to Seconds
 author: Barr
 keywords: [Rust, 1BRC, Performance, Optimization]
-description: Tackling the "The One Billion Row Challange" in Rust, and optimizing it for maximum performance.
+description: Tackling the "The One Billion Row Challenge" in Rust, and optimizing it for maximum performance.
 summary: |
-  ["The One Billion Row Challenge"](https://github.com/gunnarmorling/1brc) is a programming challenge orignally written for Java, where the goal is to summarize a billion rows of temprature measurements as fast as possible. But since its invention, it has been solved in many other languages. In this blog post I will tackle the challenge myself and try to make my solution as fast as possible using Rust using a single thread, and in the next post I will make it even faster using multiple threads and a couple more single-threaded optimizations I only applied after already parallizing it.
+  ["The One Billion Row Challenge"](https://github.com/gunnarmorling/1brc) is a programming challenge originally written for Java, where the goal is to summarize a billion rows of temperature measurements as fast as possible. But since its invention, it has been solved in many other languages. In this blog post I will tackle the challenge myself and try to make my solution as fast as possible using Rust on a single thread, and in the next post I will make it even faster using multiple threads and a couple more single-threaded optimizations I only applied after already parallelizing it.
 github: https://github.com/barr-israel/1brc
 ---
 
@@ -14,7 +14,7 @@ github: https://github.com/barr-israel/1brc
 I will start with a simple and slow solution, and among other optimizations, I will incorporate some assumptions into the code to make it even faster.  
 While making too many assumptions can lead to errors, making the correct assumptions enables very effective optimizations. And this is just a performance challenge with input that is generated from a known range of options, so we can make a lot of assumptions.  
 Additionally, this blog post is written as I am optimizing my solution, and not as a retrospective on optimizing it, so it is long and not entirely grouped by the type of optimization used.  
-Instead, it shows the spiral nature of performance optimization: targeting the hot spots one by one, and returning to already improved sections to improve them again once their relative run time grows once other parts became faster.  
+Instead, it shows the spiral nature of performance optimization: targeting the hot spots one by one, and returning to already improved sections to improve them again when their relative run time grows once other parts became faster.  
 
 Almost every variation of the solution shown here can be seen in the GitHub repository linked above.
 
@@ -41,7 +41,7 @@ The output of the solution needs to be the minimum, mean average and maximum val
 This kind of problem allows for some impressive performance gains by making assumptions about the inputs, such as:
 
  - No errors in the text allows skipping any validation.
- - The possible length of station names is known in advance because we have the list of station before the dataset is generated.
+ - The possible length of station names is known in advance because we have the list of stations before the dataset is generated.
  - We know the range of possible measurements and their precision.
 
 ## Generating The Dataset
@@ -50,8 +50,8 @@ To generate the dataset, I used the original Java code given in the challenge re
 ```bash
 ./mvnw clean verify
 ```
-To simply build the generation code, after spending a while looking for the correct version of JDK that will actually manage to build the project.  
-And then waiting waiting a few minutes for the 14GB text file to be generated:
+To build the generation code, after spending a while looking for the correct version of JDK that will actually manage to build the project.  
+And then waiting a few minutes for the 14GB text file to be generated:
 ```bash
 ./create_measurements.sh 1000000000
 ```
@@ -60,7 +60,7 @@ And then waiting waiting a few minutes for the 14GB text file to be generated:
 
 Unless stated otherwise, all measurements in this challenge will be done using [hyperfine](https://github.com/sharkdp/hyperfine), on the same machine equipped with an Intel Core Ultra 7 165H and 32GiB of LPDDR5 Memory running at 6400 MT/s.  
 For more stable results and to avoid thermal throttling, until the final benchmark the CPU frequency will be locked to 3.5GHz using `cpupower frequency-set`, and the single-threaded versions will be locked to a single core using `taskset -c 1`.  
-Core 1 is specifically chosen to avoid core 0(and its SMT sibling core 5) which handles some kernel related work, and to ensure the program always runs on a performance core and not an efficiency core, as Intel's newer CPUs utilise a hybrid approach combining two different types of cores on the same CPU.  
+Core 1 is specifically chosen to avoid core 0 (and its SMT sibling core 5) which handles some kernel related work, and to ensure the program always runs on a performance core and not an efficiency core, as Intel's newer CPUs utilize a hybrid approach combining two different types of cores on the same CPU.  
 
 > [!NOTE] hyperfine
 > [hyperfine](https://github.com/sharkdp/hyperfine) is a simple benchmarking tool that runs a given program many times to generate an average and a range of statistically likely run times.  
@@ -108,7 +108,7 @@ Benchmark 1: ./calculate_average_baseline.sh
 ```
 
 So we can expect the solutions to be somewhere in that range.  
-As another point of reference, without the CPU frequency setting, the same baseline solution takes **116 seconds**(and the lower bound 1.16 seconds).  
+As another point of reference, without the CPU frequency setting, the same baseline solution takes **116 seconds** (and the lower bound 1.16 seconds).  
 
 
 #### Output Verification
@@ -116,7 +116,7 @@ As another point of reference, without the CPU frequency setting, the same basel
 I have also saved the output of the baseline solution to compare to my output and verify it.  
 All solutions shown in this post have been verified to be identical to the baseline using `cmp`.
 
-> [!Note] cmp
+> [!NOTE] cmp
 > [cmp](https://www.man7.org/linux/man-pages/man1/cmp.1.html) is a standard Linux utility to compare files, and it is often the easiest way to verify two files are identical: if the output of `cmp file1 file2` is empty, the files are identical.
 > In the past I used [diff](https://man7.org/linux/man-pages/man1/diff.1.html) for this purpose.  
 > `diff` has the advantage of showing all differences, and not just *where* the first difference is like `cmp` does, but `cmp` is a lot faster.
@@ -175,7 +175,7 @@ Range (min … max):   95.028 s … 96.116 s    10 runs
 
 ## Better Compilation Parameters - 89 Seconds
 
-Most of the times I am trying to optimize some Rust code, I use the following Cargo profiles to maximize performance and gather performance metrics:
+Most of the time I am trying to optimize some Rust code, I use the following Cargo profiles to maximize performance and gather performance metrics:
 ```Cargo
 [profile.max]
 inherits = "release"
@@ -192,7 +192,7 @@ strip = false
 The `max` profile contains the most aggressive optimizations that a profile can apply, and the `bench` profile is the same with the addition of some debugging information that can help debug and gather performance metrics.  
 In most cases there will actually be no measurable difference between the two profiles.
 
-> [!Warning] panic = "abort"
+> [!WARNING] panic = "abort"
 > The `panic = "abort"` setting usually has an immeasurably small effect on normal runtime performance.  
 > Outside a scenario where the program panics, the difference is essentially a slightly smaller binary due to not needing the unwinding code.
 > When the program *does* panic, setting it to abort skips unwinding the stack and cleaning up resources. That also means that recovering from a panic is no longer possible.
@@ -219,7 +219,7 @@ I will be using these parameters in the rest of the measurements.
 
 ## Optimizing The Wrong Part: Updating The Summary During Parsing - 86 Seconds
 
-The first optimization that comes to mind, which the baseline already does, is that we fortunately(or more likely, it was specifically designed this way) don't actually need to store all the measurements for every station, for any specific station we only need to store the highest measurement, the lowest measurement, the sum of all measurements, and the amount of measurements.  
+The first optimization that comes to mind, which the baseline already does, is that we fortunately (or more likely, it was specifically designed this way) don't actually need to store all the measurements for every station, for any specific station we only need to store the highest measurement, the lowest measurement, the sum of all measurements, and the amount of measurements.  
 Using the sum and amount of measurements we can instantly calculate the average at the end of the scan.  
 So the new algorithm is:
 1. For every line of text:
@@ -267,7 +267,7 @@ It is faster, but the improvement is much smaller than I expected. Why?
 
 Flamegraphs are a way to visualize the time a program spent in every function in the code, and here it can show us how much did the previous solution spend in gathering the measurements, which should consist mostly of reallocating the vectors the measurements are stored in.  
 In Rust, the easiest way to generate flamegraphs is using [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph).  
-After installing the package, it can be ran using:
+After installing the package, it can be run using:
 ```
 cargo flamegraph --profile bench
 ```
@@ -275,14 +275,14 @@ I am using the `bench` profile because the flamegraph generation needs the debug
 
 The resulting flamegraph shows this rough breakdown of the time:
 
- - `readline` - 34.9%
+ - `read_line` - 34.9%
  - `str::parse` - 8.7%
  - `str::split_once` - 5%
  - `HashMap::entry` - 26.2%
 
  And the rest spread in various other parts of the code, that don't take enough time to be important yet.
  
-So targeting the measurements vectors was not a great decision, which would have been more obvious if measured before applying this optimization, but at least it takes up significantly less memory, which can be measured using `/bin/time -v`, which shows the "maximum resident set size" used by the program(this output is from the first solution):
+So targeting the measurements vectors was not a great decision, which would have been more obvious if measured before applying this optimization, but at least it takes up significantly less memory, which can be measured using `/bin/time -v`, which shows the "maximum resident set size" used by the program (this output is from the first solution):
 
 ```bash
 	User time (seconds): 85.25
@@ -309,8 +309,8 @@ So targeting the measurements vectors was not a great decision, which would have
 	Exit status: 0
 ```
 
-> [!Warning] time
-> `time` is also a built-in command in many shells, which do not support the `-v` flag, so to invoke the actual `time` program, the full path `/bin/time` must be used(and might need to be installed via your package manager).
+> [!WARNING] time
+> `time` is also a built-in command in many shells, which do not support the `-v` flag, so to invoke the actual `time` program, the full path `/bin/time` must be used (and might need to be installed via your package manager).
 
 The original solution peaks at `4201520 KB`, or about `4 GB`, which fits with the one billion 4 byte floats it needs to store.  
 In comparison, the new version peaks at only `2196 KB`, or about `2 MB`, 2000 times less than the original solution:
@@ -322,11 +322,11 @@ Generating a flamegraph for the new version shows roughly the same breakdown of 
 
 ## Optimizing The Right Part: A New Parser - 59 Seconds
 
-The [generated flamegraph](flamegraph1.svg) shows that a quarter of the time is spend in `readline`, and almost 15% is spent in the rest of the parsing. It also shows that there is effectively nothing to gain improving the sorting phase as it is so short it does not even appear on the flamegraph.  
-Digging down more into `readline`, we can see that its time is split very roughly equally between UTF-8 validation, vector allocation and searching for the line separator(using `memchr`).  
+The [generated flamegraph](flamegraph1.svg) shows that a quarter of the time is spent in `readline`, and almost 15% is spent in the rest of the parsing. It also shows that there is effectively nothing to gain improving the sorting phase as it is so short it does not even appear on the flamegraph.  
+Digging down more into `readline`, we can see that its time is split very roughly equally between UTF-8 validation, vector allocation and searching for the line separator (using `memchr`).  
 These are all things that can be improved by writing a new parser.
 
-### Byte Are Faster Than Chars
+### Bytes Are Faster Than Chars
 
 Reading the file as an array of bytes into a pre-allocated buffer allows the line splitting to speed up, and already gives a measurable speedup to lowering the run time to **75 seconds**:
 ```rust
@@ -346,7 +346,7 @@ The conversion to `&str` and later scanning over it eliminates a lot of the gain
 
 ### Measurement Value Parsing
 
-One useful observation is that all measurements are always in the range -99.9 to 99.9, and always have exactly 1 decimal digit, so we can actually parse it more easily into an integer(with its units being tenths of degrees), and only convert it back to the expected format at the end.
+One useful observation is that all measurements are always in the range -99.9 to 99.9, and always have exactly 1 decimal digit, so we can actually parse it more easily into an integer (with its units being tenths of degrees), and only convert it back to the expected format at the end.
 
 This is not necessarily the fastest implementation under these constraints, but it will do for now:
 
@@ -449,7 +449,7 @@ impl From<StationName> for String {
 And using it as the key to the hash map. Not using all the bytes could increase the collision rate in the hash map, but the station names are varied enough that almost no pair of stations share the same first 8 bytes.    
 This takes the run time down to **47 seconds**.  
 
-There is no point in hashing less than 8 bytes at a time because every smaller size will just get automatically extended to 8 bytes if it is smaller, before the hashing(in the default hasher and many other hashers).
+There is no point in hashing less than 8 bytes at a time because every smaller size will just get automatically extended to 8 bytes if it is smaller, before the hashing (in the default hasher and many other hashers).
 
 ### Hashing Faster
 
@@ -460,16 +460,16 @@ Instead of hashing less times or hashing less bytes, we can replace the hashing 
 - `rustc-hash::FxHashMap`: improved the run time to **34.8 seconds**.
 - `hashbrown::hash_map::HashMap`: improved the run time to **35.3 seconds**.
 
-I also tried `nohash-hasher::NoHashHasher` which does not actually do any hashing and just passes the `u64` as the hash, which can be useful when the keys are already random, but it worsened the run time to **103 seconds**
+I also tried `nohash-hasher::NoHashHasher` which does not actually do any hashing and just passes the `u64` as the hash, which can be useful when the keys are already random, but since the keys are not random, this very weak "hash" function worsened the run time to **103 seconds**
 
 So I'll continue with `FxHashMap`.
 
-## Mapping Is Faster Than Reading(In This Case) - 27.7 seconds
+## Mapping Is Faster Than Reading (In This Case) - 27.7 seconds
 
 Up until now I relied on `BufReader` to get the data from the file, one common alternative way to read data from a file is using `mmap`.  
 `mmap` is a system call that maps a file into memory, making it appear to the program as a big array that can be read directly, it can even map files much larger than the system memory can contain.  
 Of course, the file is not copied into system memory until it is needed, but that part is handled by the operating system during page faults.
-To use `mmap` in Rust, you can use a crate such as `memmap` or its replacement, `mememap2`, or you can the call `mmap` system call directly via the `libc` crate, like `memmap` and `memmap2` do:
+To use `mmap` in Rust, you can use a crate such as `memmap` or its replacement, `memmap2`, or you can call `mmap` system call directly via the `libc` crate, like `memmap` and `memmap2` do:
 
 ```rust
 // use_mmap.rs
@@ -498,7 +498,7 @@ Now the iterator needs to be updated to use a slice:
 ```rust
 // use_mmap.rs
 ...
-let mapped_file = unsafe { MmapOptions::new().map(&file).expect("mmap failed") };
+let mapped_file = map_file(&file).unwrap();
 for line in mapped_file.split(|c| *c == b'\n')
     if line.is_empty() { // the last item in the iterator will be an empty line
       break;
@@ -532,15 +532,15 @@ Range (min … max):   27.637 s … 27.889 s    10 runs
 The updated [flamegraph](flamegraph4.svg) shows 2 things:
 
 - Reading the file disappeared completely from the flamegraph
-- `position` is becoming a considerable bottleneck again(especially now that we are using it twice)
+- `position` is becoming a considerable bottleneck again (especially now that we are using it twice)
 
 The reason we can't see the reading itself at all is also part of the reason `position` takes such a long time now: there is no dedicated section of code for getting the bytes from the file into the program, it is done entirely during page faults, which are attributed to the assembly instructions that cause the faults.  
 These instructions would mostly be inside `position`, since it is the first to touch any line of text.
 
-> [!Note] Page Faults
+> [!NOTE] Page Faults
 > As I explained before, `mmap` does not actually copy the entire file into memory, it just makes it appear to be in memory.  
-> When the program tries to access a part of the file, the CPU detects that the memory page(a small section of memory, 4KiB unless using huge pages) containing the accessed address is not mapped for the process, and causes a page fault, which pauses the program and transfers control to the OS to handle it.  
-> The page fault is handled by the operating system, which copies the missing page from the file into memory if it is not already in the page cache, points the process' page table at the page that was just read(or was already in the page cache), and then control can be given back to the program, which will read the value as if nothing happened.
+> When the program tries to access a part of the file, the CPU detects that the memory page (a small section of memory, 4KiB unless using huge pages) containing the accessed address is not mapped for the process, and causes a page fault, which pauses the program and transfers control to the OS to handle it.  
+> The page fault is handled by the operating system, which copies the missing page from the file into memory if it is not already in the page cache, points the process' page table at the page that was just read (or was already in the page cache), and then control can be given back to the program, which will read the value as if nothing happened.
 > In this case, the file is always in the page cache because of a previous warm-up run when the performance is measured. Measuring the performance with a cold cache shows a significant increase in run time.
 
 ## memchr - 26.1 seconds
@@ -571,7 +571,7 @@ Not as big of an improvement as I expected, but still a win.
 
 In all previous versions, the station name had to be copied into a new vector/array in order to use it, and looking at an updated [flamegraph](flamegraph5.svg), 17% of the run time is spent in `StationName::from<&[u8]>`, which consists of copying the slice into the 32 byte array.  
 Instead, I want to store a reference to the slice instead of copying it.  
-This also allows arbitrarily long station names, and not only 32 bytes long ones(despite the longest possible name from the generator is shorter than 32 bytes, the rules specify up to 100 bytes should be supported).
+This also allows arbitrarily long station names, and not only 32 bytes long ones (despite the longest possible name from the generator is shorter than 32 bytes, the rules specify up to 100 bytes should be supported).
 
 So I converted `StationName` to simply hold a reference to the slice:
 ```rust
@@ -605,7 +605,7 @@ Range (min … max):   24.812 s … 25.260 s    10 runs
 The new `StationName` can't be read as a `u64` like it was before, because there are unknown bytes past the `;`, which will make the generated hash inconsistent.  
 Additionally, a [new flamegraph](flamegraph6.svg) shows that the byte by byte hashing is again very slow, taking 9.6% of the time.  
 To solve that, one solution is to notice that all possible station names *are* at least 3 bytes, and with the separating `;` character, the first 4 bytes are consistent for the same station.  
-So by taking the `;` along with the character(and stripping it during printing), hashing 4 bytes at a time is possible.  
+So by taking the `;` along with the station name (and stripping it during printing), hashing 4 bytes at a time is possible.  
 ```rust
 // station_name_slice.rs
 fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -638,7 +638,7 @@ At this point, I will separate the solution into 2 versions:
 It must work on any measurements file generated from the file generation code.  
 That means the possible station names are known, and they are all 3-27 bytes.  
 
-Unless stated otherwise(at the end of the post), this is the version I am optimizing for.
+Unless stated otherwise (at the end of the post), this is the version I am optimizing for.
 
 #### Compliant Version
 
@@ -652,7 +652,7 @@ The longest possible station name has 26 bytes, and the longest measurement has 
 Additionally, we know the shortest station name is 3 bytes, so we really only need to look at 30 bytes, but that is actually not important with this optimization.  
 Fortunately, most modern machines have 256-bit SIMD registers, which are 32 bytes, enough to fit an entire line.
 
-> [!Note] SIMD
+> [!NOTE] SIMD
 > SIMD stands for "Single Instruction, Multiple Data", and it refers to a set of registers available on most CPUs that are capable of applying computations to multiple values at once, each taking only a part of the register. These registers can have different sizes depending on the CPU architecture.  
 > For example, 256-bit SIMD registers can fit 32 1 byte values, 16 2 byte values, 8 4 byte values, or 4 8 byte values.  
 > Common operations supported by SIMD registers are operations such as load, store, addition,comparison, etc.
@@ -666,7 +666,7 @@ To find a byte within a SIMD register containing the line, we need to compare it
 
 There are a few ways to use SIMD in Rust, the two main ways are:
 
-- `std::simd`: a portable SIMD module that uses a generic `Simd<T,N>` type to represent all SIMD variables, and compiles them to the best available native SIMD types depending on the compilation flags(I have set `-Ctarget-cpu=native`, so it should be using the 256-bit registers that are available).  
+- `std::simd`: a portable SIMD module that uses a generic `Simd<T,N>` type to represent all SIMD variables, and compiles them to the best available native SIMD types depending on the compilation flags (I have set `-Ctarget-cpu=native`, so it should be using the 256-bit registers that are available).  
   These portable types have 2 downsides: The first is that they only have a subset of the available operations, since they must work on supported platform and not just one specific extension. And the second is that they are nightly only and require a feature flag.
  - `core::arch`: A module containing modules for every supported architecture, such as `x86_64` or `arm`, each containing the available SIMD intrinsics for that architecture.  
   Even within a specific architecture there is a separation between different extensions, since some operations are only available on a specific extension of a specific architecture.
@@ -683,7 +683,7 @@ fn read_line(text: &[u8]) -> (&[u8], &[u8], &[u8]) {
 ```
 
 `#[cfg(target_feature = "avx2")]` causes the function to only be compiled if the feature is enabled, and `#[target_feature(enable = "avx2")]` allows using `AVX2` operations inside the function without `unsafe`.  
-So now we can to use any SIMD operation that requires the `AVX2`(or any of the extensions it is a superset of, such as `SSE` and `AVX`) inside the function.
+So now we can to use any SIMD operation that requires the `AVX2` (or any of the extensions it is a superset of, such as `SSE` and `AVX`) inside the function.
 
 I am not planning to run this code on any machine that does not support `AVX2`, but I might as well support doing that.  
 We can put the old parsing code in a function that will only be compiled if `AVX2` is *not* available:
@@ -738,11 +738,11 @@ let separator_pos = separator_mask_u32.trailing_zeroes();
 
 
 > [!Important] Trailing Or Leading?
-> When first writing this code I accidentally used `leading_zeroes`, because I expected the `u32` to look the same as the SIMD register but packed, but the `u32` stores the bits from least to most significant, so the `u32` is actually mirrored from how the SIMD register looks.
+> When first writing this code I accidentally used `leading_zeroes`, because I expected the `u32` to look the same as the SIMD register but packed, but the `u32` stores the bits from least to most significant, which means bit 0(the right-most one) of the `u32` corresponds to the first byte in the SIMD register(the one with the smallest address).
 
-Finding the position of the `\n` is the same, but it is worth nothing that if the line is of the maximum length of 33, the `\n` will not appear in the loaded SIMD.  
+Finding the position of the `\n` is the same, but it is worth noting that if the line is of the maximum length of 33, the `\n` will not appear in the loaded SIMD.  
 But that is okay, because this check will return a mask of all 0s, which means `trailing_zeroes` returns 32, the correct position.  
-If the longest line was longer than 35 bytes(because we could skip the first 3 if needed), this method would not work.
+If the longest line was longer than 35 bytes (because we could skip the first 3 if needed), this method would not work.
 
 The full function looks like this:
 ```rust
@@ -778,8 +778,8 @@ while (remainder.len() - 32) != 0 {
   ...
 ```
 
-> [!Warning] Undefined Behaviour
-> Undefined behaviour(or UB), refers to code whose execution is not defined by the programming language, for example, reading and writing to arbitrary memory locations.  
+> [!WARNING] Undefined Behaviour
+> Undefined behaviour (or UB), refers to code whose execution is not defined by the programming language, for example, reading and writing to arbitrary memory locations.  
 > When a piece of code contains UB, the compiler is allowed to do many things, including crash, silently ignore it, or do any other read/write.computation.  
 > In this case, I am reading past the end of the array, which is considered UB.  
 > If the end of the array happens to be at the end of a memory page, it is very likely that the program will crash when trying to load the last line.
@@ -797,7 +797,7 @@ An updated [flamegraph](flamegraph8.svg) shows that the time to read and split a
 The flame graph now shows 2 major potential spots for improvement:
 
 - `parse_measurement`: takes 16% of the time, it should be possible to improve with some very complicated SIMD code.
-- `[u8]::eq`(called inside the hash map): takes 33% of the time, might be possible to improve it by comparing using SIMD if the standard implementation does not already do it, and might be possible to improve it by simply calling it less, which means reducing the amount of collisions in the hash map.
+- `[u8]::eq` (called inside the hash map): takes 33% of the time, might be possible to improve it by comparing using SIMD if the standard implementation does not already do it, and might be possible to improve it by simply calling it less, which means reducing the amount of collisions in the hash map.
 
 I decided to look into the slice comparisons first.  
 Until now I have only looked at replacing the entire hash map and making hashing faster, but another part of the operations of the hash map is comparing keys directly to find the correct item. This includes calling `[u8]::eq` at least once per lookup, and there is a huge amount of lookups in the program.
@@ -810,11 +810,11 @@ Range (min … max):   14.603 s … 14.740 s    10 runs
 But looking at a flamegraph, the time spent comparing did not change, and there was never a significant time spent reallocating to begin with.  
 So I tried increasing the capacity to a more extreme value of `2**20`, which slowed it down, and still did not change the time taken by comparisons.  
 So there are probably not as many collisions as I thought there are to begin with.  
-I am not sure what exactly caused the time to improve, and counting cycles with `perf stat -e cycles` also confirms that the version preallocating with a capacity of 1024 consumed less cycles, and `perf stat`(the default metrics) shows that it has 0.2% less branch mispredictions, so I am going to keep it like that.  
+I am not sure what exactly caused the time to improve, and counting cycles with `perf stat -e cycles` also confirms that the version preallocating with a capacity of 1024 consumed less cycles, and `perf stat` (the default metrics) shows that it has 0.2% less branch mispredictions, so I am going to keep it like that.  
 Other values for the capacity lead to an equal or worse time.
 
 So instead of reducing the amount of comparison, I need to make every comparison faster.  
-We know that we can fit every station name in a 256-bit SIMD register, but AVX2 does not have operations that select which bytes to load(which are known as masked operations), which are only available in the newer AVX512.
+We know that we can fit every station name in a 256-bit SIMD register, but AVX2 does not have operations that select which bytes to load (which are known as masked operations), which are only available in the newer AVX512.
 
 Fortunately, we know that there are 32 bytes to read from the start of every station name, so we could load them all and simply ignore the irrelevant ones.  
 The problem with doing that is that simply loading 32 bytes when the slice might be shorter than 32 bytes is undefined behaviour, even if we know that the slice came from a bigger slice that *does* allow this wide load.  
@@ -930,7 +930,7 @@ At this stage I wanted to check how much of the time the program waits for data 
 33.2 %  tma_branch_mispredicts
 ```
 Which indicates that only 3.1% of the time is spent waiting for memory, and an extremely high 33.2% of the time is wasted on branch mispredictions.  
-Running a plain `perf stat` with the default metrics(which include branch mispredictions), show that 3.3% of branches were mispredicted, that is usually a very high number.  
+Running a plain `perf stat` with the default metrics (which include branch mispredictions), show that 3.3% of branches were mispredicted, that is usually a very high number.  
 To see exactly where the mispredictions happen, I used `perf record -e branch-misses:pp` to generate a profile showing which branches specifically were mispredicted often.
 
 The generated report shows 3 major spots where branch mispredictions occur:
@@ -955,7 +955,7 @@ Percent │
   21.73 │    ├──jne          22a
 ```
 
-And the third is again in the measurement parsing, checking if the measurement is negative, contributing another 25% of the misses(there is another copy of these instructions later with another 4%):
+And the third is again in the measurement parsing, checking if the measurement is negative, contributing another 25% of the misses (there is another copy of these instructions later with another 4%):
 ```asm
 Percent │
         │     if text[0] == b'-' {
@@ -974,7 +974,7 @@ Two useful tools for branch-less programming are the conditional move instructio
 
 ### The Conditional Move Instruction In x86
 
-The `cmove` instruction(and its variants), take 2 parameters: 1 destination register and 1 source register, and it copies the value of the source register if the last comparison done was true by checking the comparison flag in the CPU.  
+The `cmove` instruction (and its variants), take 2 parameters: 1 destination register and 1 source register, and it copies the value of the source register if the last comparison done was true by checking the comparison flag in the CPU.  
 
 For example:
 
@@ -983,7 +983,7 @@ cmp          $0x2d,%al
 cmove        %r10d,%ebx
 ```
 Moves the value in register `ebx` into register `r10d` only of the value in register `al` is equal to `0x2d`.  
-Conditional move instructions operate based on CPU flags that are set whenever values are compared, and the basic `cmove` operates if the values were equal(Other variations can be found [here](https://www.felixcloutier.com/x86/cmovcc)).
+Conditional move instructions operate based on CPU flags that are set whenever values are compared, and the basic `cmove` operates if the values were equal (Other variations can be found [here](https://www.felixcloutier.com/x86/cmovcc)).
 
 ### Indexing Using Booleans
 
@@ -1001,7 +1001,7 @@ This code:
 
 1. Zeros the register `r9`.  
 1. Compares the value in register `al` to the value `0x2d`.  
-1. Saves the comparison result in `r9b`(the lower byte of `r9`).  
+1. Saves the comparison result in `r9b` (the lower byte of `r9`).  
 1. Loads the value from the address that is the sum of the values in `r8` and `r9`, into the register `r8d`.  
 
 That means that after these instructions run, `r8d` will contain the value at `r9` if `al` does not contain `0x2d`, and the value at `r9 + 1` if it contains a different value.  
@@ -1020,7 +1020,7 @@ let bonus = if team = TEAM::BLUE{
 }
 ```
 
-In other languages, ternary operators(which do not exist in Rust) often achieve a similar result, and sometimes using an array of size 2 and indexing into it also helps achieve this:
+In other languages, ternary operators (which do not exist in Rust) often achieve a similar result, and sometimes using an array of size 2 and indexing into it also helps achieve this:
 
 ```rust
 let bonus_options = [10,5];
@@ -1069,7 +1069,7 @@ move player_data.winner_bonus to register2
 add register2 to register1
 lost: return register1
 ```
-This pseudo-assembly contains a single jump that skips getting the player data(represented as just getting the bonus here), and adding it to the base points.
+This pseudo-assembly contains a single jump that skips getting the player data (represented as just getting the bonus here), and adding it to the base points.
 
 The time spent on this function is the following:
 
@@ -1111,6 +1111,7 @@ fn parse_measurement(mut text: &[u8]) -> i32 {
     let tens = [b'0', (text[0])][(text.len() > 3) as usize] as i32;
     let ones = (text[text.len() - 3]) as i32;
     let tenths = (text[text.len() - 1]) as i32;
+    /// each ASCII digit is value+b'0', so after multiplication and summation, subtracting 111*b'0' makes leaves just the values.
     let abs_val = tens * 100 + ones * 10 + tenths - 111 * b'0' as i32;
     if negative { -abs_val } else { abs_val }
 }
@@ -1122,7 +1123,7 @@ The 3 main changes here are:
 - Utilizing the fact that the last and third to last are always the tenths and the ones digits respectively.
 - Mathematically rearranging the `0` subtraction to occur in one instruction.
 
-> [!Note] Why `assert_unchecked`?
+> [!NOTE] Why `assert_unchecked`?
 > Unless the Rust compiler can guarantee a given index is within a slice, it will always emit a bounds checking comparison.  
 > This comparison will jump to some panicking code if it fails.  
 > But a correct program will never fail the bounds check, we just need to give the compiler a few hints.  
@@ -1186,7 +1187,7 @@ This time I ran `hyperfine` with 1 warm-up run and 50 measurement runs to get it
 
 ## Faster Min/Max: Replacing Branch-less With Branching - 8.21 seconds
 
-In contrast to what we just did in the measurement parsing, the minimum and maximum functions used to keep the lower and highest measurement per station already use the branch-less `cmovl`(move if less) and `cmovg`(move if greater) instruction, and they take 7% of the runtime of the entire program:
+In contrast to what we just did in the measurement parsing, the minimum and maximum functions used to keep the lower and highest measurement per station already use the branch-less `cmovl` (move if less) and `cmovg` (move if greater) instruction, and they take 7% of the runtime of the entire program:
 ```asm
 Percent │     if other < self { other } else { self }
    0.01 │       cmp          %eax,%ebx
@@ -1202,7 +1203,7 @@ Percent │     if other < self { other } else { self }
 ```
 But we know that finding a new lowest or largest values will not happen often:  
 There are only 2000 possible measurements, so no matter what the measurements are, it is impossible to update the min/max more than 2000 times each. And considering there are only a few hundred stations and a billion lines, each station appears millions of times, so only a fraction of them need to update the min/max values.  
-Furthermore, with random measurements, the number of total updates will be *even smaller* as statistically the chance to beat the current measurement gets lower every time it is updated(half as likely after every update on average, leading to an average amount of updates of `log2(N)` for `N` lines).  
+Furthermore, with random measurements, the number of total updates will be *even smaller* as statistically the chance to beat the current measurement gets lower every time it is updated (half as likely after every update on average, leading to an average amount of updates of `log2(N)` for `N` lines).  
 This low amount of updates will allow the CPU to correctly predict that the value should not be updated almost every time.
 
 Replacing the two lines with:
@@ -1216,7 +1217,7 @@ if measurement > *max {
 }
 ```
 Causes the conditional moves to be replaced with branches and improves the run time slightly.  
-It gets harder to measure such small differences, but the increased amount of runs allows us to maintain statistical certainty that this version is faster(can be seen from the previous result being outside the deviation and range of the new result).
+It gets harder to measure such small differences, but the increased amount of runs allows us to maintain statistical certainty that this version is faster (can be seen from the previous result being outside the deviation and range of the new result).
 
 ```bash
 Time (mean ± σ):      8.215 s ±  0.009 s    [User: 7.804 s, System: 0.390 s]
@@ -1383,7 +1384,7 @@ for (station_name, min, avg, max) in summary[..summary.len() - 1].iter() {
     let _ = out.write_fmt(format_args!("{station_name}={min:.1}/{avg:.1}/{max:.1}, "));
 }
 let (station_name, min, avg, max) = summary.last().unwrap();
-let _ = out.write_fmt(format_args!("{station_name}={min:.1}/{avg:.1}/{max:.1}, "));
+let _ = out.write_fmt(format_args!("{station_name}={min:.1}/{avg:.1}/{max:.1}}}"));
 ```
 As expected, there is no measurable difference in the run time.
 
@@ -1444,7 +1445,7 @@ fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
 }
 ```
 
-The biggest issue with being more complaint appears in `read_line`: In order to find the length of the station name, I switched back to `memchr` because the `;` is no longer guaranteed to be in the first 33 bytes of the line.  
+The biggest issue with being more compliant appears in `read_line`: In order to find the length of the station name, I switched back to `memchr` because the `;` is no longer guaranteed to be in the first 33 bytes of the line.  
 After `memchr` finds the end of the station name, I can still use a SIMD solution for the measurement, since those are always short enough, And this time I can even use 128 bit registers instead of 256.  
 So the new `read_line` looks like this:
 ```rust
@@ -1548,7 +1549,7 @@ While solving this challenge I have attempted some optimizations that did not re
   Unfortunately, the more complex flow in `line_read` that included a loop that parses a line for every 1 in the resulting mask caused a slowdown of a few seconds.  
   I do suspect that using AVX512 and always parsing *exactly* 2 lines per `line_read` will achieve some speed-up.
 - Creating the different slices from each line generated a bounds check, which I wanted to eliminate, but adding another `assert_unchecked` did not have an effect, and replacing the slice creation with an `unchecked_get` version resulted in a slowdown of a second and a half I could not explain, and it is not worth exploring it just to save 2 instructions that do not take any significant time.
-- I tried using PGO(Profile Guided Optimizations) for a easy performance boost, but that resulted in a slowdown of around a tenth of a second.  
+- I tried using PGO (Profile Guided Optimizations) for a easy performance boost, but that resulted in a slowdown of around a tenth of a second.  
 - Before writing the lookup table variant of `parse_measurement`, I thought I could beat the compiler with hand written inline assembly, but the result was tens of milliseconds behind the compiler's version.
 
 ## Unexplained Regression When Slicing Differently
@@ -1556,7 +1557,7 @@ While solving this challenge I have attempted some optimizations that did not re
 The current version of `read_line` uses normal indexing to create the slices passed to `parse_measurement` and back to the main function, which means they emit bounds checks.  
 Additionally, the measurement slice is currently created using `&text[separator_pos + 1..line_break_pos]` which technically needs an extra byte to avoid UB when it is read as a `u32`.  
 For a reason I can't explain, making the slice longer by one, making it only using a starting index, working with pointers instead of slice, or making the slice using an unsafe unchecked method, all of those increase the run time by ~100-200ms.  
-The only difference I found in the generated instructions is the removed bounds check(which consumed very little time as it was predicted perfectly).  
+The only difference I found in the generated instructions is the removed bounds check (which consumed very little time as it was predicted perfectly).  
 For now I'm leaving it as is for maximum performance.
 If anyone can figure out what causes this regression I would appreciate an explanation.  
 
@@ -1576,4 +1577,4 @@ Time (mean ± σ):      6.744 s ±  0.083 s    [User: 6.408 s, System: 0.310 s]
 Range (min … max):    6.581 s …  6.823 s    10 run
 ```
 
-I planned on making this part about all the single threaded optimizations and the next part about all the multi-threaded optimizations, but this post is already very long, so there will be some of both in the next part, and also benchmarking using a much more powerful system.
+I planned on making this part about all the single-threaded optimizations and the next part about all the multi-threaded optimizations, but this post is already very long, so there will be some of both in the next part, and also benchmarking using a much more powerful system.

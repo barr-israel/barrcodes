@@ -5,7 +5,7 @@ author: Barr
 keywords: [Advent of Code, Rust]
 description: Going 2 dimensional - a word search
 summary: |
-  Seems like these challanges mostly don't involve searching for this missing historian(does anyone even notice the lore for these?), today we've got an elf looking for help with her word search.
+  Seems like these challenges mostly don't involve searching for this missing historian(does anyone even notice the lore for these?), today we've got an elf looking for help with her word search.
 github: https://github.com/barr-israel/aoc2024/blob/main/src/day4.rs
 ---
 ## Part 1
@@ -56,7 +56,7 @@ pub fn part1(input: &[u8]) -> u32 {
         .sum::<u32>()
 }
 ```
-I'm just looking all the `X`s in the input(using `memchr` which I introduced [yesterday](/posts/aoc2024/day1/), could have also used a simple `position`), and then checking their surroundings.
+I'm just looking all the `X`s in the input(using `memchr` which I introduced [yesterday](`/posts/aoc2024/day1`), could have also used a simple `position`), and then checking their surroundings.
 
 The only issues I had was bounds checking mistakes, I first tried fixing them with checked `input.get()`, but the index could underflow anyway, so I didn't use it.
 
@@ -180,7 +180,7 @@ But it's slower..
 Day4 - Part2/naive      time:   [57.325 µs 57.440 µs 57.577 µs]
 Day4 - Part2/opt        time:   [63.710 µs 63.891 µs 64.066 µs]
 ```
-What I didn't do yet, is utilise this knowledge that the X is always in the center area - the `get()` methods will never go out of bounds, this means that can be replaced by normal indexing, and more than that, since I know it will never go out of bounds and the compiler doesn't, I can replace it with unsafe `get_unchecked()`.  
+What I didn't do yet, is utilize this knowledge that the X is always in the center area - the `get()` methods will never go out of bounds, this means that can be replaced by normal indexing, and more than that, since I know it will never go out of bounds and the compiler doesn't, I can replace it with unsafe `get_unchecked()`.  
 ```
 Day4 - Part2/opt        time:   [55.863 µs 55.969 µs 56.093 µs]
 ```

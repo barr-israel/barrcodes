@@ -5,7 +5,7 @@ author: Barr
 keywords: [Advent of Code, Rust]
 description: Finding cliques in graphs
 summary: |
-  Today's challange is about finding cliques in a graph constructed from a list of edges, that together make up a computer network.
+  Today's challenge is about finding cliques in a graph constructed from a list of edges, that together make up a computer network.
 github: https://github.com/barr-israel/aoc2024/blob/main/src/day23.rs
 ---
 ## Input

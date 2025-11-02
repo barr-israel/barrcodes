@@ -283,7 +283,7 @@ Unfortunately, this method will not accelerate part 1, because it checks every s
 ### Slow Iterators
 Sometimes iterators can cause significant slow downs compared to the usual loop syntax, and this turned out to be one of those cases.
 
-When I was looking at the `perf annotate` results of the single threaded version of part 1, I noticed a lot of time was spent on these instructions:
+When I was looking at the `perf annotate` results of the single-threaded version of part 1, I noticed a lot of time was spent on these instructions:
 ```asm
 ;     let ans = patterns.iter().any(|&pattern| {
   pushq        %rbp
@@ -373,7 +373,7 @@ for l in 1..potential_pattern.len().min(max_length) + 1 {
 ```
 Since the amount of patterns is so much bigger than the longest pattern, this ends up being faster, despite accessing the hash set many times.
 
-I applied this improvement to both the single threaded and rayon solutions, and they all got a lot faster:
+I applied this improvement to both the single-threaded and rayon solutions, and they all got a lot faster:
 ```
 Day19 - Part1/(default)       time:   [4.3911 ms 4.3960 ms 4.4010 ms]
 Day19 - Part1/hashset         time:   [1.0393 ms 1.0396 ms 1.0398 ms]

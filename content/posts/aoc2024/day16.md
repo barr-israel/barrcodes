@@ -5,7 +5,7 @@ author: Barr
 keywords: [Advent of Code, Rust]
 description: The first Dijkstra day
 summary: |
-  Today's challange is just a maze, but turning has a cost.
+  Today's challenge is just a maze, but turning has a cost.
 github: https://github.com/barr-israel/aoc2024/blob/main/src/day16.rs
 ---
 ## Input

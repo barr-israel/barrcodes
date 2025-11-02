@@ -5,7 +5,7 @@ author: Barr
 keywords: [Advent of Code, Rust]
 description: Maze solving with a twist - the maze changes over time.
 summary: |
-  Today's challange involves reaching the end of a maze, a simple request, until it starts changing in part 2.
+  Today's challenge involves reaching the end of a maze, a simple request, until it starts changing in part 2.
 github: https://github.com/barr-israel/aoc2024/blob/main/src/day18.rs
 ---
 ## Input

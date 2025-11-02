@@ -3,9 +3,9 @@ publishDate: 2024-12-01
 title: Day 1 - Historian Histeria
 author: Barr
 keywords: [Advent of Code, Rust]
-description: A simple introduction challange.
+description: A simple introduction challenge.
 summary: |
-  Another year, another set of challanges from [Advent of Code](https://adventofcode.com/), and once again I will attempt to solve them all using Rust.  
+  Another year, another set of challenges from [Advent of Code](https://adventofcode.com/), and once again I will attempt to solve them all using Rust.  
   But this year, I will attempt to document my solutions on this blog.
 github: https://github.com/barr-israel/aoc2024/blob/main/src/day1.rs
 ---
@@ -265,7 +265,7 @@ pub fn part1_nom(input: &[u8]) -> u32 {
 }
 ```
 Effectively what the parser does is:
-Iterate over the text, consuming `seperated_pair`s of 2 `u32`s separated by 3 spaces every time, and each pair is separated from the next using an optional line break.
+Iterate over the text, consuming `separated_pair`s of 2 `u32`s separated by 3 spaces every time, and each pair is separated from the next using an optional line break.
 `debug_assert!` is only there to help the compiler understand the correct types for `it`, I could not find an easier way to get this code to compile.
 And the results:
 ```
@@ -299,7 +299,7 @@ fn parse_line_fast(line: &[u8]) -> (u32, u32) {
 And using it for part 1:
 ```rust
 #[aoc(day1, part1, fast)]
-// parsing the input optimised for the real input shape
+// parsing the input optimized for the real input shape
 pub fn part1_fast(input: &[u8]) -> u32 {
     let (left_col, right_col) = input.chunks(14).map(parse_line_fast).unzip();
     part1_solve(left_col, right_col)
@@ -307,7 +307,7 @@ pub fn part1_fast(input: &[u8]) -> u32 {
 ```
 And 2:
 ```rust { {hl_lines=[8]}}
-// parsing the input optimised for the real input shape
+// parsing the input optimized for the real input shape
 #[aoc(day1, part2, fast)]
 pub fn part2_fast(input: &[u8]) -> u32 {
     let mut left_col = Vec::<u32>::with_capacity(1000);
@@ -340,7 +340,7 @@ Almost there..
 
 ## SIMD
 SIMD instructions can operate on multiple numbers at once, if structured correctly, sometimes the compiler can do it on its own(usually called vectorization), and sometimes it needs a little help.  
-The `parse_line_fast` function can utilise these SIMD instructions, but using the `portable_simd` from the standard library, requires using nightly and an unstable feature flag.
+The `parse_line_fast` function can utilize these SIMD instructions, but using the `portable_simd` from the standard library, requires using nightly and an unstable feature flag.
 ```rust
 fn parse_line_simd(line: &[u8]) -> (u32, u32) {
     const WEIGHTS: u32x4 = u32x4::from_slice(&[10000u32, 1000u32, 100u32, 10u32]);

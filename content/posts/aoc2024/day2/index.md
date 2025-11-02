@@ -3,9 +3,9 @@ publishDate: 2024-12-02
 title: Day 2 - Red-Nosed Reports
 author: Barr
 keywords: [Advent of Code, Rust]
-description: A classic "one mistake allowed" challange.
+description: A classic "one mistake allowed" challenge.
 summary: |
-  Second day, this time we've got a classic "one mistake allowed" challange for part 2.
+  Second day, this time we've got a classic "one mistake allowed" challenge for part 2.
 github: https://github.com/barr-israel/aoc2024/blob/main/src/day2.rs
 ---
 Part 1 is fairly basic, I'll just get to my naive solution:
@@ -295,7 +295,7 @@ Day2 - Part1/opt        time:   [26.598 µs 26.659 µs 26.729 µs]
 Day2 - Part1/no_vec     time:   [18.076 µs 18.178 µs 18.290 µs]
 ```
 
-It is probably possible to avoid allocation in part 2, but it is a lot more complicated and quite possibly wont make it any faster, so I didn't do it, instead I optimised it to just not be brute force.
+It is probably possible to avoid allocation in part 2, but it is a lot more complicated and quite possibly wont make it any faster, so I didn't do it, instead I optimized it to just not be brute force.
 
 ## Part 2 - Single Pass(kind of)
 The original solution used brute force to find if a line is valid, at worst checking every line as many times as there are numbers in it.  
