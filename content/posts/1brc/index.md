@@ -2563,7 +2563,7 @@ In this post I tackled the one billion row challenge, optimizing it for maximum 
 - Trying out a few ways to parallelize the work and use many threads, and as expected, the fastest way is the one that requires the least synchronization between the threads.  
 - When software optimization started to run out, using a server with far more cores.
 - Offloading the file unmapping to a different process since it started taking a very significant amount of the time.
-- Writing a relatively simple hash map from scratch that beats the rest by being optimized for this use case.
+- Writing a relatively simple hash map from scratch that beats the complex general purpose hash map in the standard library by being optimized for this use case.
 - Using a perfect hash function to make the custom hash map even faster.
 
 And many more smaller optimizations.
