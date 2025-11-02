@@ -1,5 +1,5 @@
 ---
-publishDate: 2025-11-01
+publishDate: 2025-11-02
 title: The One Billion Row Challenge Part 1 - Minutes to Seconds
 author: Barr
 keywords: [Rust, 1BRC, Performance, Optimization]

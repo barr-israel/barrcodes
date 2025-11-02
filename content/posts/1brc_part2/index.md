@@ -1,5 +1,5 @@
 ---
-publishDate: 2025-11-01
+publishDate: 2025-12-01
 title: The One Billion Row Challenge Part 2 - Using Multithreading to Go Sub-Second
 author: Barr
 keywords: [Rust, 1BRC, Performance, Optimization, Parallelism]
@@ -7,6 +7,7 @@ description: Improving on my solution for the one billion row challenge from par
 summary: |
   ["The One Billion Row Challenge"](https://github.com/gunnarmorling/1brc) is a programming challenge originally written for Java, where the goal is to summarize a billion rows of temperature measurements as fast as possible. In part 1, I reduced the run time from minutes to seconds, and in this part I'm going even further.
 github: https://github.com/barr-israel/1brc
+draft: true
 ---
 
 ## The Starting Point And Making A Plan
