@@ -1,5 +1,5 @@
 ---
-publishDate: 2025-11-02
+publishDate: 2025-11-03
 title: The One Billion Row Challenge
 author: Barr
 keywords: [Rust, 1BRC, Performance, Optimization, Parallelism]
