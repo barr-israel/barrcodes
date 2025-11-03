@@ -1375,9 +1375,9 @@ Range (min … max):    8.020 s …  8.051 s    25 runs
 ## Optimizing The Output For No Benefit
 
 The simple `print!` calls in Rust obtain a lock to access the underlying `stdout`, which they release immediately after printing.  
-Rewriting the printing section to obtain and release the lock only once across the entire section should make it faster, but it is already a non-measurable amount of the time of the program:
+Rewriting the printing section to obtain and release the lock only once across the entire section is simple, but does not actually give any benefit because printing was already not taking up any measurable amount of time(I'm only mentioning it because this method of printing is used on all future versions).
 ```rust
-// final_single_thread.rs
+// cleanup.rs
 let mut out = std::io::stdout().lock();
 let _ = out.write_all(b"{");
 for (station_name, min, avg, max) in summary[..summary.len() - 1].iter() {
@@ -1386,14 +1386,13 @@ for (station_name, min, avg, max) in summary[..summary.len() - 1].iter() {
 let (station_name, min, avg, max) = summary.last().unwrap();
 let _ = out.write_fmt(format_args!("{station_name}={min:.1}/{avg:.1}/{max:.1}}}"));
 ```
-As expected, there is no measurable difference in the run time.
 
 ## A Confusing Clean Up
 
 I wanted to clean the code a bit by replacing the `(i32,i32,i32,i32)` with a new struct `StationEntry` that held the 4 integers.  
 So I initially simply wrote it as:
 ```rust
-// final_single_thread.rs
+// cleanup.rs
 struct StationEntry {
     min: i32,
     max: i32,
@@ -2516,7 +2515,7 @@ All three are measurably faster than before, but effectively equal to each other
 I tried running the search for `FxHasher` with more seeds to find a lower divisor but could not find anything.  
 Since we expect to only load up to 413 cache lines around the 413 station names and having 2 entries on the same line is fairly unlikely, the actual size of the table doesn't matter. So I picked the identity function
 
-## Benchmarking A Compliant Solution Again
+## Benchmarking An Updated Compliant Solution
 
 After making so many changes since the last compliant version benchmark, I want to see how well it does now.
 
@@ -2550,6 +2549,37 @@ While solving this challenge I have attempted some optimizations that did not re
 - Pinning the threads to cores only caused performance to decrease significantly.
 - I tried to incorporate prefetching into the code by prefetching the lookup table and the hash table indexes in one iteration and actually accessing them in the next iteration, but despite reducing the L1 miss rate from 11% to 0.7%, the run time and the `tma_l1_bound` metric did not measurably improve.
 
+
+## Final Results
+
+After all of these optimizations, its time for the final benchmarks. I ran the last version on both systems, on 1 and on all the threads:
+
+Laptop, 1 thread:
+```bash
+Time (mean ± σ):      5.015 s ±  0.098 s    [User: 0.001 s, System: 0.002 s]
+Range (min … max):    4.889 s …  5.217 s    10 runs
+```
+
+Laptop. 22 threads:
+```bash
+Time (mean ± σ):     533.6 ms ±   4.7 ms    [User: 0.5 ms, System: 2.1 ms]
+Range (min … max):   526.1 ms … 541.8 ms    10 runs
+```
+
+Server, 1 thread:
+```bash
+Time (mean ± σ):      8.837 s ±  0.020 s    [User: 0.001 s, System: 0.001 s]
+Range (min … max):    8.803 s …  8.863 s    10 runs
+```
+
+Server, 112 threads:
+```bash
+Time (mean ± σ):     156.2 ms ±   4.5 ms    [User: 0.9 ms, System: 1.3 ms]
+Range (min … max):   148.4 ms … 168.1 ms    20 runs
+```
+
+I hoped to be able to go below 100ms, but it looks like I'll need an even more powerful system for that.
+
 ## Summary
 
 In this post I tackled the one billion row challenge, optimizing it for maximum performance using many methods and approaches, including:
@@ -2568,4 +2598,4 @@ In this post I tackled the one billion row challenge, optimizing it for maximum 
 
 And many more smaller optimizations.
 
-After all of this work, I achieved a final time of **154 milliseconds** to solve the challenge.
+After all of this work, I achieved a final time of **156 milliseconds**.
