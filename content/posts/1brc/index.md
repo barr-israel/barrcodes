@@ -1634,9 +1634,12 @@ Because the hash map is constantly accessed I already expected it to be far slow
 
 This time I only ran each once since they take so long getting an accurate measurement is not important.  
 
-| Threads  | 1    | 2  | 4   | 6   |
-| -------- | ---- | -- | --- | --- |
-| Time (s) | 15.6 | 72 | 121 | 193 |
+| Threads | Time (s) |
+| ------- | -------- |
+| 1       | 15.6     |
+| 2       | 72       |
+| 4       | 121      |
+| 6       | 193      |
 
 Clearly, in this case more cores do not mean better performance.  
 Looking at a profile of the program, even with a single thread, the added locking and unlocking of the mutex takes **60%** of the time, and with more threads it gets even worse, taking 90% with 2 threads and 96% with 4.  
@@ -1659,9 +1662,17 @@ When working with locks, the critical section that is guarded by a lock generall
 
 And the results are significantly better, but still not beating the single-threaded performance:  
 
-| Threads  | 1    | 2    | 4    | 6    | 8    | 10   | 12   | 14   | 16   |
-| -------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| Time (s) | 14.4 | 17.8 | 13.7 | 11.7 | 10.6 | 10.3 | 9.9  | 11.1 | 12.6 |
+| Threads | Time (s) |
+| ------- | -------- |
+| 1       | 14.4     |
+| 2       | 17.8     |
+| 4       | 13.7     |
+| 6       | 11.7     |
+| 8       | 10.6     |
+| 10      | 10.3     |
+| 12      | 9.9      |
+| 14      | 11.1     |
+| 16      | 12.6     |
 
 Next, I am going back to single-threaded maps to actually achieve higher performance.
 
@@ -1726,9 +1737,20 @@ for t in threads {
 
 And as expected, this solution works much better (these *were* measured with `hyperfine`):
 
-| Threads  | 1    | 2     | 4    | 6    | 8    | 10   | 12   | 14   | 16   | 18   | 20   | 22   |
-| -------- | ---- | ----- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| Time (s) | 8.02 | 4.06  | 2.12 | 1.46 | 1.44 | 1.25 | 1.10 | 1.01 | 0.96 | 0.89 | 0.86 | 0.88 |
+| Threads | Time (s) |
+| ------- | -------- |
+| 1       | 8.02     |
+| 2       | 4.06     |
+| 4       | 2.12     |
+| 6       | 1.46     |
+| 8       | 1.44     |
+| 10      | 1.25     |
+| 12      | 1.10     |
+| 14      | 1.01     |
+| 16      | 0.96     |
+| 18      | 0.89     |
+| 20      | 0.86     |
+| 22      | 0.88     |
 
 And we finally crossed the 1 second barrier!  
 
@@ -1737,9 +1759,20 @@ Additionally, the performance scaled almost perfectly up to 6 threads and then t
 
 Locking the CPU frequency doesn't make a lot of sense at this point since not all threads can actually reach this frequency, especially not consistently, because of power and thermal reason. So I am unlocking the frequency from this point onward:
 
-| Threads  | 1    | 2    | 4    | 6    | 8    | 10   | 12   | 14   | 16   | 18   | 20   | 22   |
-| -------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| Time (s) | 6.02 | 3.15 | 1.78 | 1.30 | 1.30 | 1.13 | 1.02 | 0.95 | 0.91 | 0.86 | 0.84 | 0.83 |
+| Threads | Time (s) |
+| ------- | -------- |
+| 1       | 6.02     |
+| 2       | 3.15     |
+| 4       | 1.78     |
+| 6       | 1.30     |
+| 8       | 1.30     |
+| 10      | 1.13     |
+| 12      | 1.02     |
+| 14      | 0.95     |
+| 16      | 0.91     |
+| 18      | 0.86     |
+| 20      | 0.84     |
+| 22      | 0.83     |
 
 The slower efficiency cores do not gain a lot from the uncapped frequency, and they are slowing down the total run time.  
 
@@ -1784,9 +1817,20 @@ In general, the less predictable the run time is, the more a higher granularity 
 
 And now, benchmarking it again:
 
-| Threads  | 1    | 2    | 4    | 6    | 8    | 10   | 12   | 14   | 16   | 18   | 20   | 22   |
-| -------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| Time (s) | 6.05 | 3.20 | 1.78 | 1.30 | 1.14 | 1.02 | 0.94 | 0.86 | 0.84 | 0.81 | 0.78 | 0.77 |
+| Threads | Time (s) |
+| ------- | -------- |
+| 1       | 6.05     |
+| 2       | 3.20     |
+| 4       | 1.78     |
+| 6       | 1.30     |
+| 8       | 1.14     |
+| 10      | 1.02     |
+| 12      | 0.94     |
+| 14      | 0.86     |
+| 16      | 0.84     |
+| 18      | 0.81     |
+| 20      | 0.78     |
+| 22      | 0.77     |
 
 It appears that there is a small overhead added, which slightly slows down the program with 1 or 2 threads.  
 With 8 or more threads is when the gains from having a higher granularity appear, as all of the results are faster than before.
