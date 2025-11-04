@@ -2592,6 +2592,10 @@ While solving this challenge I have attempted some optimizations that did not re
 - Before writing the lookup table variant of `parse_measurement`, I thought I could beat the compiler with hand written inline assembly, but the result was tens of milliseconds behind the compiler's version.
 - Pinning the threads to cores only caused performance to decrease significantly.
 - I tried to incorporate prefetching into the code by prefetching the lookup table and the hash table indexes in one iteration and actually accessing them in the next iteration, but despite reducing the L1 miss rate from 11% to 0.7%, the run time and the `tma_l1_bound` metric did not measurably improve.
+- After publishing this post, a Reddit commenter suggested using [gperf](https://www.gnu.org/software/gperf/manual/gperf.html). `gperf` is a program that finds a perfect hash function given a list of keywords or structs to hash.  
+  Unfortunately, `gperf` is not capable of generating Rust code, but translating the C code it generated to Rust was not difficult.  
+  The new hash function shrinked the table to only 1268 entries, but it contained far more instructions.  
+  Benchmarking it shows that it is a few milliseconds slower than the perfect hash functions I came up with. That is a pretty good result for how easy to use and fast `gperf` is(it only takes 13ms to run, compared to the brute force searches I did that took up to several minutes), but not good enough to improve my solution.
 
 
 ## Final Results
