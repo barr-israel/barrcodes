@@ -59,8 +59,8 @@ And then waiting a few minutes for the 14GB text file to be generated:
 ## Benchmarking Methodology
 
 Unless stated otherwise, all measurements in this challenge will be done using [hyperfine](https://github.com/sharkdp/hyperfine), on the same machine equipped with an Intel Core Ultra 7 165H and 32GiB of LPDDR5 Memory running at 6400 MT/s.  
-For more stable results and to avoid thermal throttling, until the final benchmark the CPU frequency will be locked to 3.5GHz using `cpupower frequency-set`, and the single-threaded versions will be locked to a single core using `taskset -c 1`.  
-Core 1 is specifically chosen to avoid core 0 (and its SMT sibling core 5) which handles some kernel related work, and to ensure the program always runs on a performance core and not an efficiency core, as Intel's newer CPUs utilize a hybrid approach combining two different types of cores on the same CPU.  
+For more stable results and to avoid thermal throttling, until the final benchmark the CPU frequency will be locked to 3.5GHz using `cpupower frequency-set`, and the single-threaded versions will be locked to a single core using `taskset -c 2`.  
+Core 1 is specifically chosen to avoid core 0 (and its SMT sibling core 1) which handles some kernel related work, and to ensure the program always runs on a performance core and not an efficiency core, as Intel's newer CPUs utilize a hybrid approach combining two different types of cores on the same CPU.  
 
 > [!NOTE] hyperfine
 > [hyperfine](https://github.com/sharkdp/hyperfine) is a simple benchmarking tool that runs a given program many times to generate an average and a range of statistically likely run times.  
@@ -2592,6 +2592,9 @@ While solving this challenge I have attempted some optimizations that did not re
 - Before writing the lookup table variant of `parse_measurement`, I thought I could beat the compiler with hand written inline assembly, but the result was tens of milliseconds behind the compiler's version.
 - Pinning the threads to cores only caused performance to decrease significantly.
 - I tried to incorporate prefetching into the code by prefetching the lookup table and the hash table indexes in one iteration and actually accessing them in the next iteration, but despite reducing the L1 miss rate from 11% to 0.7%, the run time and the `tma_l1_bound` metric did not measurably improve.
+- I tried improved instruction-level parallelism by combining the reading of more than one line at a time into each loop iteration.  
+  This involves more than just unrolling, I reordered the operations in an attempt to allow more instruction-level parallelism.  
+  The result was slightly increased instructions per cycle(IPC) on all cores(slightly more on the efficiency cores that do not have SMT which already helps with keeping IPC higher), but the overall performance did not improve.  
 - After publishing this post, a Reddit commenter suggested using [gperf](https://www.gnu.org/software/gperf/manual/gperf.html). `gperf` is a program that finds a perfect hash function given a list of keywords or structs to hash.  
   Unfortunately, `gperf` is not capable of generating Rust code, but translating the C code it generated to [Rust](https://github.com/barr-israel/1brc/blob/main/src/gperf.rs) was not difficult.  
   The new hash function shrinked the table to only 1268 entries, but it contained far more instructions.  
