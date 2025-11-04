@@ -2593,7 +2593,7 @@ While solving this challenge I have attempted some optimizations that did not re
 - Pinning the threads to cores only caused performance to decrease significantly.
 - I tried to incorporate prefetching into the code by prefetching the lookup table and the hash table indexes in one iteration and actually accessing them in the next iteration, but despite reducing the L1 miss rate from 11% to 0.7%, the run time and the `tma_l1_bound` metric did not measurably improve.
 - I tried improved instruction-level parallelism by combining the reading of more than one line at a time into each loop iteration.  
-  This involves more than just unrolling, I reordered the operations in an attempt to allow more instruction-level parallelism.  
+  This involves more than just unrolling, I reordered the operations in an attempt to allow them to run in parallel.  
   The result was slightly increased instructions per cycle(IPC) on all cores(slightly more on the efficiency cores that do not have SMT which already helps with keeping IPC higher), but the overall performance did not improve.  
 - After publishing this post, a Reddit commenter suggested using [gperf](https://www.gnu.org/software/gperf/manual/gperf.html). `gperf` is a program that finds a perfect hash function given a list of keywords or structs to hash.  
   Unfortunately, `gperf` is not capable of generating Rust code, but translating the C code it generated to [Rust](https://github.com/barr-israel/1brc/blob/main/src/gperf.rs) was not difficult.  
