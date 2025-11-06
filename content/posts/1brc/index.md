@@ -2601,6 +2601,18 @@ While solving this challenge I have attempted some optimizations that did not re
   Benchmarking it shows that it is a few milliseconds slower(~161ms total) than the perfect hash functions I came up with. That is a pretty good result for how easy to use and fast `gperf` is(it only takes 13ms to run, compared to the brute force searches I did that took up to several minutes), but not good enough to improve my solution.
 
 
+## A Touch Of NUMA
+
+After publishing this post, I was testing some optimization and noticed that getting the file into the page cache via a warm-up run of the program itself with 112 threads gives different results than using `vmtouch -t` or a warm-up run of 1 thread.  
+The exact reason is related to NUMA(Non-Uniform Memory Access), but I will not get into it in this post(maybe some part 2 in the future?).  
+Getting the file into the cache this way speeds it up considerably:
+```bash
+Time (mean ± σ):     137.1 ms ±   5.5 ms    [User: 0.3 ms, System: 1.9 ms]
+Range (min … max):   133.8 ms … 156.3 ms    22 runs
+```
+
+Because NUMA is not relevant in 1 thread and my laptop is not a NUMA system, this only affects the high thread benchmark on the server.
+
 ## Final Results
 
 After all of these optimizations, its time for the final benchmarks. I ran the last version on both systems, on 1 and on all the threads:
@@ -2625,8 +2637,8 @@ Range (min … max):    8.803 s …  8.863 s    10 runs
 
 Server, 112 threads:
 ```bash
-Time (mean ± σ):     156.2 ms ±   4.5 ms    [User: 0.9 ms, System: 1.3 ms]
-Range (min … max):   148.4 ms … 168.1 ms    20 runs
+Time (mean ± σ):     137.1 ms ±   5.5 ms    [User: 0.3 ms, System: 1.9 ms]
+Range (min … max):   133.8 ms … 156.3 ms    22 runs
 ```
 
 I hoped to be able to go below 100ms, but it looks like I'll need an even more powerful system for that.
@@ -2649,4 +2661,4 @@ In this post I tackled the one billion row challenge, optimizing it for maximum 
 
 And many more smaller optimizations.
 
-After all of this work, I achieved a final time of **156 milliseconds**.
+After all of this work, I achieved a final time of **137 milliseconds**.
