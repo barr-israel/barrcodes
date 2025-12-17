@@ -2563,7 +2563,7 @@ Since we expect to only load up to 413 cache lines around the 413 station names 
 
 After making so many changes since the last compliant version benchmark, I want to see how well it does now.
 
-By combining the final multi-threaded solution without the PHF (because its whole point was to utilize the name assumptions) and the exact same changes made in the previous compliant versio, I created the final compliant solution:
+By combining the final multi-threaded solution without the PHF (because its whole point was to utilize the name assumptions) and the exact same changes made in the previous compliant version, I created the final compliant solution:
 
 Running this version on the laptop with 22 threads:
 
@@ -2613,32 +2613,96 @@ Range (min … max):   133.8 ms … 156.3 ms    22 runs
 
 Because NUMA is not relevant in 1 thread and my laptop is not a NUMA system, this only affects the high thread benchmark on the server.
 
+## A Final Improvement
+
+Another optimization I tried only after publishing this post was to increase cache utilization by using another table in the hash table implementation, making it an indirect table.  
+The current hash table is made out of 13779 station measurement entries, each taking 16 bytes(4 i32's).  
+However, we only use 413 of these, and the rest are wasted.  
+So instead, I created a new `REDIRECTION_TABLE` that contains 13779 u16 indices, making this table 8 times smaller, and the 413 relevant indices from this table, point to a much smaller table that contains 413 station measurement entries.  
+So instead of each hash table taking 220,464 bytes, they each only take 6,608 bytes, and all the hash tables share the 27,558 bytes of the redirection table.  
+More importantly than the memory saving, we can now fit these tables in L1 cache(each core only has 48KiB of L1 cache) and improve the cache hit rate, at the cost of one more load per hash table access.
+
+Because `const` code is still a little limited, I was forced to modify the indexing code a bit to create the redirection table:
+
+```rust
+const HASH_MAX_INDEX: usize = 13779;
+
+pub static REDIRECTION_TABLE: [u16; HASH_MAX_INDEX] = {
+    let mut table = [0; HASH_MAX_INDEX];
+    let mut station_index = 0usize;
+    while station_index != STATION_NAMES.len() {
+        let mut name_slice = [0u8; 9];
+        let name = STATION_NAMES[station_index];
+        let mut name_idx = 0usize;
+        while name_idx < name.len() && name_idx < name_slice.len() {
+            name_slice[name_idx] = name[name_idx];
+            name_idx += 1;
+        }
+        const OFFSET: usize = 1;
+        let ptr = unsafe { name_slice.as_ptr().add(OFFSET) } as *const u64;
+        let mut sample = unsafe { ptr.read_unaligned() };
+        let len = if name.len() - 1 > 8 {
+            8
+        } else {
+            name.len() - 1
+        };
+        let to_mask = len * 8;
+        let mask = u64::MAX >> (64 - to_mask);
+        sample &= mask;
+        let hash = sample as usize % HASH_MAX_INDEX;
+        table[hash] = station_index as u16;
+        station_index += 1;
+    }
+    table
+};
+```
+
+And in the hash table itself the only changes are to shrink the array each hash table uses, and add the table access to `get_name_index`:
+
+```rust
+pub struct MyPHFMap {
+    entries: Box<[StationEntry; STATIONS_COUNT]>,
+}
+...
+pub fn get_name_index(name: &[u8]) -> usize {
+    ...
+    let index = sample as usize % HASH_MAX_INDEX;
+    REDIRECTION_TABLE[index] as usize
+}
+```
+
+These changes lower the L1 cache miss rate from 5.1% to 3%, and improve the performance by a few more milliseconds on all 112 threads:
+```bash
+Time (mean ± σ):     132.9 ms ±   1.0 ms    [User: 0.5 ms, System: 1.7 ms]
+Range (min … max):   131.2 ms … 135.5 ms    22 runs
+```
+
 ## Final Results
 
-After all of these optimizations, its time for the final benchmarks. I ran the last version on both systems, on 1 and on all the threads:
+After all of these optimizations, its time for the final measurement:
 
 Laptop, 1 thread:
 ```bash
-Time (mean ± σ):      5.015 s ±  0.098 s    [User: 0.001 s, System: 0.002 s]
-Range (min … max):    4.889 s …  5.217 s    10 runs
+Time (mean ± σ):      5.054 s ±  0.094 s    [User: 0.001 s, System: 0.003 s]
+Range (min … max):    4.937 s …  5.174 s    10 runs
 ```
 
 Laptop. 22 threads:
 ```bash
-Time (mean ± σ):     533.6 ms ±   4.7 ms    [User: 0.5 ms, System: 2.1 ms]
-Range (min … max):   526.1 ms … 541.8 ms    10 runs
+Time (mean ± σ):     564.8 ms ±   4.9 ms    [User: 0.5 ms, System: 1.6 ms]
+Range (min … max):   556.3 ms … 571.0 ms    10 runs
 ```
 
 Server, 1 thread:
 ```bash
-Time (mean ± σ):      8.837 s ±  0.020 s    [User: 0.001 s, System: 0.001 s]
-Range (min … max):    8.803 s …  8.863 s    10 runs
+Time (mean ± σ):      9.013 s ±  0.003 s    [User: 0.001 s, System: 0.000 s]
+Range (min … max):    9.009 s …  9.018 s    10 runs
 ```
 
 Server, 112 threads:
 ```bash
-Time (mean ± σ):     137.1 ms ±   5.5 ms    [User: 0.3 ms, System: 1.9 ms]
-Range (min … max):   133.8 ms … 156.3 ms    22 runs
+Time (mean ± σ):     132.9 ms ±   1.0 ms    [User: 0.5 ms, System: 1.7 ms]
+Range (min … max):   131.2 ms … 135.5 ms    22 runs
 ```
 
 I hoped to be able to go below 100ms, but it looks like I'll need an even more powerful system for that.
@@ -2657,8 +2721,8 @@ In this post I tackled the one billion row challenge, optimizing it for maximum 
 - When software optimization started to run out, using a server with far more cores.
 - Offloading the file unmapping to a different process since it started taking a very significant amount of the time.
 - Writing a relatively simple hash map from scratch that beats the complex general purpose hash map that is in the standard library by being optimized for this use case.
-- Using a perfect hash function to make the custom hash map even faster.
+- Using an perfect hash function to make the custom hash map even faster.
 
 And many more smaller optimizations.
 
-After all of this work, I achieved a final time of **137 milliseconds**.
+After all of this work, I achieved a final time of **133 milliseconds**.
